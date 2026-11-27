@@ -7536,6 +7536,24 @@ iframe {
   border-radius: 999px;
 }
 
+/* Легенда меток «Вернуться позже»: те же красные треугольники, что в сетке. */
+.test-run__flags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+
+.test-run__flags-mark {
+  width: 0;
+  height: 0;
+  border-top: 10px solid var(--color-danger);
+  border-left: 10px solid transparent;
+}
+
 .test-run__finish {
   width: 100%;
 }
@@ -7561,6 +7579,7 @@ iframe {
 /* Карточка текущего вопроса */
 
 .test-question {
+  position: relative;
   padding: 18px 20px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -7573,6 +7592,8 @@ iframe {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  /* Место под флажок «Вернуться позже» в правом верхнем углу карточки. */
+  padding-right: 38px;
   margin-bottom: 12px;
 }
 
@@ -7606,6 +7627,47 @@ iframe {
 .test-question__verdict.is-wrong {
   color: var(--color-danger);
   background: var(--color-danger-bg);
+}
+
+/* Флажок «Вернуться позже» в правом верхнем углу карточки вопроса.
+   Неактивный — контурный и серый, активный — красный и закрашенный. */
+.test-flag {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.test-flag:hover {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
+}
+
+.test-flag:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.test-flag.is-flagged {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  border-color: color-mix(in srgb, var(--color-danger) 45%, transparent);
+}
+
+.test-flag.is-flagged .icon {
+  fill: currentColor;
 }
 
 .test-question__title {
@@ -8050,12 +8112,14 @@ iframe {
 }
 
 .test-nav__btn {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
   aspect-ratio: 1;
   padding: 0;
+  overflow: hidden;
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -8099,6 +8163,20 @@ iframe {
   color: var(--color-primary);
   border-color: var(--color-primary);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 28%, transparent);
+}
+
+/* Отметка «Вернуться позже»: маленький красный треугольник в правом верхнем
+   углу ячейки — как индикатор флажка в Moodle. Угол ячейки скруглён, поэтому
+   треугольник обрезается радиусом кнопки. */
+.test-nav__flag {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-top: 10px solid var(--color-danger);
+  border-left: 10px solid transparent;
+  pointer-events: none;
 }
 
 /* Экран результатов */

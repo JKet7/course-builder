@@ -3,7 +3,8 @@
  * ветвление и результаты. Чистые функции без React — их проверяет render-check.
  *
  * Состояние попытки хранится в localStorage (`course-builder:test:<blockId>`):
- * прогресс и таймер переживают перезагрузку страницы, как чек-листы теории.
+ * прогресс, таймер и отметки «Вернуться позже» (`run.flags`) переживают
+ * перезагрузку страницы, как чек-листы теории.
  */
 
 export const TEST_RUN_VERSION = 1;
@@ -122,6 +123,32 @@ export function isAnswerCorrect(question, answer) {
 export function isResolved(answer) {
   const verdict = answer?.verdict;
   return verdict === 'correct' || verdict === 'wrong' || verdict === ANSWERED_VERDICT;
+}
+
+/** Вопрос отмечен флажком «Вернуться позже» (карта `run.flags`). */
+export function isFlagged(run, questionId) {
+  return Boolean(questionId && run?.flags?.[questionId]);
+}
+
+/** Сколько вопросов отмечено флажком — подпись панели навигации. */
+export function flaggedCount(run) {
+  return Object.keys(run?.flags ?? {}).length;
+}
+
+/**
+ * Флажок «Вернуться позже»: отметка живёт в попытке, поэтому не зависит от
+ * того, отвечен вопрос или нет, и не мешает переходить к нему из навигации.
+ * Повторный вызов снимает отметку — ключ из карты удаляется.
+ */
+export function toggleFlag(run, questionId) {
+  if (!run || !questionId) return run;
+
+  const flags = { ...(run.flags ?? {}) };
+
+  if (flags[questionId]) delete flags[questionId];
+  else flags[questionId] = true;
+
+  return { ...run, flags };
 }
 
 /**
@@ -351,8 +378,8 @@ export function elapsedSeconds(run, now = Date.now()) {
  * Сверка сохранённой попытки с текущим тестом.
  * Вопросы могли добавить или удалить, варианты — отредактировать. Порядок
  * существующих вопросов и перемешанных вариантов сохраняем, новые дописываем
- * в конец, удалённые вычищаем вместе с ответами. Черновики и ответы на
- * исчезнувшие вопросы читателю уже не нужны.
+ * в конец, удалённые вычищаем вместе с ответами. Черновики, метки «Вернуться
+ * позже» и ответы на исчезнувшие вопросы читателю уже не нужны.
  */
 export function reconcileRun(run, questions, settings = DEFAULT_SETTINGS) {
   if (!run) return run;
@@ -399,8 +426,9 @@ export function reconcileRun(run, questions, settings = DEFAULT_SETTINGS) {
 
   const answers = keepKnown(run.answers);
   const picks = keepKnown(run.picks);
+  const flags = keepKnown(run.flags);
 
-  return { ...run, sequence, currentId, optionOrder, pairOrder, answers, picks };
+  return { ...run, sequence, currentId, optionOrder, pairOrder, answers, picks, flags };
 }
 
 /** Новая попытка: порядок вопросов и вариантов фиксируется сразу. */
@@ -432,6 +460,7 @@ export function createRun(blockId, questions, settings = DEFAULT_SETTINGS, rando
     currentId: sequence[0] ?? null,
     answers: {},
     picks: {},
+    flags: {},
     links: {},
     startedAt: Date.now(),
     elapsed: 0,

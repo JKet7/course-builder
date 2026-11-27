@@ -12,8 +12,10 @@ import {
   createRun,
   elapsedSeconds,
   finishRun,
+  flaggedCount,
   formatDuration,
   gradeAnswer,
+  isFlagged,
   isResolved,
   nextQuestionId,
   orderedQuestions,
@@ -22,6 +24,7 @@ import {
   reconcileRun,
   resumeRun,
   runProgress,
+  toggleFlag as toggleRunFlag,
   writeRun,
 } from '../../utils/testRun.js';
 import { useOptionalSearchParams } from '../../utils/router.js';
@@ -34,10 +37,12 @@ import { writeEditorState } from '../../utils/testEditorMemory.js';
  * статусами вопросов. Выбор варианта ничего не проверяет: читатель может менять
  * его до кнопки «Готово» в правом нижнем углу вопроса, и только она фиксирует
  * ответ и запускает проверку. В режиме ветвления выбор ведёт читателя по пути
- * (оценки нет). Попытка (порядок вопросов и вариантов, ответы, черновики,
- * таймер) хранится в localStorage и переживает перезагрузку. Каждый вход в
- * читателя ставит таймер на паузу при уходе и возобновляет при возврате; после
- * завершения показывается экран итогов.
+ * (оценки нет). Флажок «Вернуться позже» в углу вопроса помечает его для
+ * возврата: в навигации такая ячейка получает красный треугольник. Попытка
+ * (порядок вопросов и вариантов, ответы, черновики, метки, таймер) хранится в
+ * localStorage и переживает перезагрузку. Каждый вход в читателя ставит таймер
+ * на паузу при уходе и возобновляет при возврате; после завершения показывается
+ * экран итогов.
  */
 export default function TestReader({ block }) {
   const storeBlockId = useTestStore((state) => state.blockId);
@@ -178,6 +183,8 @@ export default function TestReader({ block }) {
   const currentQuestion = sequenceQuestions[position] ?? null;
   const currentAnswer = currentQuestion ? activeRun?.answers?.[currentQuestion.id] : null;
   const resolved = isResolved(currentAnswer);
+  const flaggedNow = isFlagged(activeRun, currentQuestion?.id);
+  const flagTotal = flaggedCount(activeRun);
 
   // Подсказка подвала: ответ фиксируется кнопкой «Готово» (у карточки — своими кнопками).
   const footerHint = resolved
@@ -284,6 +291,16 @@ export default function TestReader({ block }) {
     setRun((previous) => {
       if (!previous || previous.finished) return previous;
       return previous.running ? pauseRun(previous) : resumeRun(previous);
+    });
+  };
+
+  /** Флажок «Вернуться позже»: отметка в попытке, ответ и таймер не меняются. */
+  const toggleCurrentFlag = () => {
+    if (!currentQuestion) return;
+
+    setRun((previous) => {
+      if (!previous || previous.finished) return previous;
+      return toggleRunFlag(previous, currentQuestion.id);
     });
   };
 
@@ -440,8 +457,10 @@ export default function TestReader({ block }) {
             optionOrder={activeRun.optionOrder?.[currentQuestion.id]}
             pairOrder={activeRun.pairOrder?.[currentQuestion.id]}
             graded={graded}
+            flagged={flaggedNow}
             onSubmit={answerQuestion}
             onDraft={draftAnswer}
+            onToggleFlag={toggleCurrentFlag}
             onLinkClick={onInternalLink}
           />
 
@@ -476,9 +495,17 @@ export default function TestReader({ block }) {
             questions={sequenceQuestions}
             currentId={currentQuestion.id}
             answers={activeRun.answers}
+            flags={activeRun.flags}
             graded={graded}
             onSelect={goTo}
           />
+
+          {flagTotal > 0 && (
+            <p className="test-run__flags" role="status">
+              <span className="test-run__flags-mark" aria-hidden="true" />
+              Отмечено для возврата: {flagTotal}
+            </p>
+          )}
 
           <Button variant="secondary" className="test-run__finish" onClick={requestFinish}>
             Завершить тест

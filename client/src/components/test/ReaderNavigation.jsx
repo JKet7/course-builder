@@ -11,17 +11,28 @@ const STATUS_LABELS = {
  * Сетка навигации читателя: номер вопроса и его статус.
  * Синий контур — текущий, зелёный — верно, красный — неверно, серый — без
  * ответа. В режиме ветвления оценки нет: вопрос либо отвечен, либо нет.
- * Клик по номеру сразу переключает вопрос.
+ * Помеченный флажком «Вернуться позже» вопрос получает красный треугольник в
+ * правом верхнем углу ячейки — как индикатор флажка в Moodle. Клик по номеру
+ * сразу переключает вопрос, в том числе помеченный.
  */
-export default function ReaderNavigation({ questions, currentId, answers, graded = true, onSelect }) {
+export default function ReaderNavigation({ questions, currentId, answers, flags, graded = true, onSelect }) {
   return (
     <ol className="test-nav" aria-label="Вопросы теста">
       {questions.map((question, index) => {
         const answer = answers?.[question.id];
         const status = isResolved(answer) ? (graded ? answer.verdict : 'answered') : 'empty';
         const isCurrent = question.id === currentId;
+        const flagged = Boolean(flags?.[question.id]);
 
-        const classes = ['test-nav__btn', `is-${status}`, isCurrent ? 'is-current' : ''].filter(Boolean).join(' ');
+        const classes = ['test-nav__btn', `is-${status}`, isCurrent ? 'is-current' : '', flagged ? 'is-flagged' : '']
+          .filter(Boolean)
+          .join(' ');
+
+        const statusLabel = STATUS_LABELS[status] ?? 'без ответа';
+        const label = `Вопрос ${index + 1}: ${statusLabel}${flagged ? ', отмечен для возврата' : ''}`;
+        const title = [question.group?.name ?? `Вопрос ${index + 1}`, flagged ? 'Отмечен для возврата' : '']
+          .filter(Boolean)
+          .join(' · ');
 
         return (
           <li className="test-nav__item" key={question.id}>
@@ -30,11 +41,12 @@ export default function ReaderNavigation({ questions, currentId, answers, graded
               className={classes}
               data-question-id={question.id}
               aria-current={isCurrent ? 'step' : undefined}
-              aria-label={`Вопрос ${index + 1}: ${STATUS_LABELS[status] ?? 'без ответа'}`}
-              title={question.group?.name ?? `Вопрос ${index + 1}`}
+              aria-label={label}
+              title={title}
               onClick={() => onSelect(question.id)}
             >
               {index + 1}
+              {flagged && <span className="test-nav__flag" aria-hidden="true" />}
             </button>
           </li>
         );

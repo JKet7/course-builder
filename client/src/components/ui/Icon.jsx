@@ -1,7 +1,7 @@
 import {
   AlertCircle, AlignCenter, AlignLeft, AlignRight, ArrowLeft, ArrowRight, BookOpen, Bold, Check, CheckSquare,
   ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Circle, CircleHelp, ClipboardList, ClipboardPaste, Code, Combine, Copy, Crop, Download, Eraser, Eye,
-  ExternalLink, FileText, GripVertical, Heading1, Highlighter, Image, Italic, Layers, Link2, List,
+  ExternalLink, FileText, Flag, GripVertical, Heading1, Highlighter, Image, Italic, Layers, Link2, List,
   ListIndentDecrease, ListIndentIncrease, ListOrdered, ListTree, Loader2, LogOut, Menu, MessageSquare,
   MessageSquarePlus, Minus,
   MoreVertical, Palette, Pencil, Play, Plus,
@@ -35,6 +35,7 @@ const ICONS = {
   external: ExternalLink,
   eye: Eye,
   file: FileText,
+  flag: Flag,
   grip: GripVertical,
   heading: Heading1,
   help: CircleHelp,

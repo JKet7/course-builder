@@ -2226,6 +2226,13 @@ try {
       testView.includes('aria-current="step"'),
   );
   check(
+    'test (view): флажок «Вернуться позже» у вопроса, легенды без меток нет',
+    testView.includes('data-flag-toggle') &&
+      testView.includes('Отметить для возврата') &&
+      !testView.includes('test-run__flags') &&
+      !testView.includes('test-nav__flag'),
+  );
+  check(
     'test (view): подвал и завершение теста, легенды нет',
     testView.includes('test-run__footer') &&
       testView.includes('>Назад<') &&
@@ -2389,6 +2396,46 @@ try {
       !cardHtml.includes('test-question__submit'),
   );
 
+  // Флажок «Вернуться позже»: отметка в попытке, ответ и вердикт не меняются.
+  const flagHtml = render(ReaderQuestion, '/block/block-test', {
+    question: sampleQuestions[0],
+    index: 0,
+    total: 2,
+    answer: null,
+    draft: null,
+    onSubmit: testNoop,
+    onDraft: testNoop,
+    onToggleFlag: testNoop,
+  });
+  check(
+    'test (reader): флажок «Вернуться позже» в углу вопроса',
+    flagHtml.includes('class="test-flag"') &&
+      flagHtml.includes('data-flag-toggle') &&
+      flagHtml.includes('Отметить для возврата') &&
+      flagHtml.includes('aria-pressed="false"') &&
+      !flagHtml.includes('is-flagged'),
+  );
+
+  const flaggedHtml = render(ReaderQuestion, '/block/block-test', {
+    question: sampleQuestions[0],
+    index: 0,
+    total: 2,
+    answer: { selected: ['o-1'], verdict: 'correct' },
+    optionOrder: ['o-1', 'o-2'],
+    graded: true,
+    flagged: true,
+    onSubmit: testNoop,
+    onDraft: testNoop,
+    onToggleFlag: testNoop,
+  });
+  check(
+    'test (reader): отмеченный флажок закрашен и доступен после ответа',
+    flaggedHtml.includes('test-flag is-flagged') &&
+      flaggedHtml.includes('aria-pressed="true"') &&
+      flaggedHtml.includes('Снять отметку') &&
+      flaggedHtml.includes('test-feedback is-correct'),
+  );
+
   // Режим ветвления: верных и неверных ответов нет, оценки тоже.
   const { default: ReaderNavigation } = await vite.ssrLoadModule('/src/components/test/ReaderNavigation.jsx');
 
@@ -2406,6 +2453,35 @@ try {
       !branchNavHtml.includes('is-wrong') &&
       branchNavHtml.includes('Вопрос 1: отвечен') &&
       branchNavHtml.includes('Вопрос 2: без ответа'),
+  );
+
+  // Отметка «Вернуться позже» видна в сетке навигации и не мешает переходу.
+  const flaggedNavHtml = render(ReaderNavigation, '/block/block-test', {
+    questions: sampleQuestions,
+    currentId: 'q-1',
+    answers: {},
+    flags: { 'q-2': true },
+    onSelect: testNoop,
+  });
+  check(
+    'test (reader): помеченный вопрос с красным треугольником в навигации',
+    flaggedNavHtml.includes('test-nav__btn is-empty is-flagged') &&
+      (flaggedNavHtml.match(/class="test-nav__flag"/g) ?? []).length === 1 &&
+      flaggedNavHtml.includes('Вопрос 2: без ответа, отмечен для возврата'),
+  );
+
+  const unflagNavHtml = render(ReaderNavigation, '/block/block-test', {
+    questions: sampleQuestions,
+    currentId: 'q-2',
+    answers: {},
+    flags: {},
+    onSelect: testNoop,
+  });
+  check(
+    'test (reader): без отметки треугольника нет',
+    !unflagNavHtml.includes('test-nav__flag') &&
+      !unflagNavHtml.includes('is-flagged') &&
+      unflagNavHtml.includes('test-nav__btn is-empty is-current'),
   );
 
   const branchSingleHtml = render(ReaderQuestion, '/block/block-test', {
@@ -2578,6 +2654,7 @@ try {
       currentId: 'q-gone',
       answers: { 'q-gone': { verdict: 'correct' }, 'q-2': { verdict: 'wrong' } },
       picks: { 'q-gone': { selected: [] } },
+      flags: { 'q-gone': true, 'q-2': true },
       optionOrder: { 'q-1': ['o-2'], 'q-gone': ['x'] },
       pairOrder: { 'q-3': ['p-2'] },
     },
@@ -2590,9 +2667,22 @@ try {
       reconciled.currentId === 'q-2' &&
       reconciled.answers['q-gone'] === undefined &&
       reconciled.picks['q-gone'] === undefined &&
+      reconciled.flags['q-gone'] === undefined &&
+      reconciled.flags['q-2'] === true &&
       reconciled.optionOrder['q-1'].join(',') === 'o-2,o-1' &&
       reconciled.optionOrder['q-gone'] === undefined &&
       reconciled.pairOrder['q-3'].join(',') === 'p-2,p-1',
+  );
+  check(
+    'test (utils): флажок «Вернуться позже» ставится и снимается',
+    testRunUtils.createRun('block-test', sampleQuestions, {}).flags &&
+      Object.keys(testRunUtils.createRun('block-test', sampleQuestions, {}).flags).length === 0 &&
+      testRunUtils.isFlagged(testRunUtils.toggleFlag({ flags: {} }, 'q-2'), 'q-2') &&
+      !testRunUtils.isFlagged(testRunUtils.toggleFlag({ flags: {} }, 'q-2'), 'q-1') &&
+      !testRunUtils.isFlagged(testRunUtils.toggleFlag({ flags: { 'q-2': true } }, 'q-2'), 'q-2') &&
+      Object.keys(testRunUtils.toggleFlag({ flags: { 'q-2': true } }, 'q-2').flags).length === 0 &&
+      testRunUtils.flaggedCount({ flags: { 'q-2': true, 'q-3': true } }) === 2 &&
+      testRunUtils.flaggedCount({}) === 0,
   );
   check(
     'test (utils): прогресс считает только проверенные ответы',
@@ -2636,6 +2726,18 @@ try {
         answer: { selected: ['o-2'] },
         settings: { branching: false },
       }) === 'q-2',
+  );
+
+  // Стили флажка и треугольника в сетке навигации.
+  check(
+    'test (css): флажок вопроса и красный треугольник в навигации',
+    /\.test-question \{[^}]*position: relative;/.test(globalsCss) &&
+      globalsCss.includes('.test-flag {') &&
+      globalsCss.includes('.test-flag.is-flagged') &&
+      globalsCss.includes('fill: currentColor;') &&
+      globalsCss.includes('.test-nav__flag {') &&
+      globalsCss.includes('border-top: 10px solid var(--color-danger)') &&
+      globalsCss.includes('.test-run__flags {'),
   );
 
   // Логика режима редактора: раскладка разделов, перетаскивание и переходы.

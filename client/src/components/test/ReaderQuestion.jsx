@@ -316,6 +316,10 @@ function submitHint(question, graded, ready) {
  * неверно» нет, ответ можно менять до нажатия «Готово» в правом нижнем углу
  * карточки вопроса. Только «Готово» фиксирует ответ, проверяет его (в тесте с
  * оценкой) и блокирует варианты. В режиме ветвления выбор ведёт по пути.
+ *
+ * В правом верхнем углу карточки — флажок «Вернуться позже»: он не связан с
+ * ответом, поэтому доступен и до, и после «Готово», а в навигации помеченный
+ * вопрос получает красный треугольник.
  */
 export default function ReaderQuestion({
   question,
@@ -326,8 +330,10 @@ export default function ReaderQuestion({
   optionOrder,
   pairOrder,
   graded = true,
+  flagged = false,
   onSubmit,
   onDraft,
+  onToggleFlag,
   onLinkClick,
 }) {
   const resolved = isResolved(answer);
@@ -356,6 +362,18 @@ export default function ReaderQuestion({
             {answer.verdict === 'correct' ? 'Верно' : 'Неверно'}
           </span>
         )}
+
+        <button
+          type="button"
+          className={`test-flag${flagged ? ' is-flagged' : ''}`}
+          data-flag-toggle
+          aria-pressed={flagged}
+          aria-label={flagged ? 'Снять отметку «Вернуться позже»' : 'Отметить для возврата'}
+          title={flagged ? 'Снять отметку' : 'Отметить для возврата'}
+          onClick={() => onToggleFlag?.()}
+        >
+          <Icon name="flag" size={16} />
+        </button>
       </header>
 
       {question.type !== 'card' && <h2 className="test-question__title">{questionTitle(question)}</h2>}
