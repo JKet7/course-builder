@@ -1,0 +1,18 @@
+node_modules/
+*.log
+server/prisma/dev.db
+server/prisma/dev.db-journal
+server/uploads/
+.env
+.env.local
+dist/
+.DS_Store
+
+# Отчёты скриптов проверок (генерируются в client/scripts и server/scripts)
+*-check.json
+*-live.json
+step*-result.json
+
+# Временные файлы отладки
+tmp-*
+

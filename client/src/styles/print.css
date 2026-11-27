@@ -1,0 +1,665 @@
+/*
+ * Печать курса (Шаг 15) и общие стили window.print().
+ *
+ * `.print-app` — оболочка страницы /course/:id/print: панель действий на экране
+ * и «лист» документа. При печати остаётся только документ: панель, шапка
+ * приложения и кнопки скрыты, фон белый, страницы A4.
+ */
+
+/* ===== Экранная версия документа ===== */
+.print-app {
+  min-height: 100%;
+  padding: 24px 16px 64px;
+  background: #eef1f5;
+}
+
+.print-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  max-width: 860px;
+  margin: 0 auto 20px;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid #d8dee6;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgb(15 23 42 / 8%);
+}
+
+.print-toolbar__title {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.print-toolbar__answers {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 14px;
+  color: #334155;
+  cursor: pointer;
+}
+
+.print-toolbar__spacer {
+  margin-left: auto;
+}
+
+.print-status {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.print-doc {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 48px 56px;
+  color: #111;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgb(15 23 42 / 10%);
+}
+
+.print-doc__title {
+  margin-bottom: 8px;
+  font-size: 30px;
+  line-height: 1.2;
+}
+
+.print-doc__description {
+  margin: 0 0 12px;
+  color: #475569;
+}
+
+.print-doc__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+  padding-bottom: 14px;
+  font-size: 13px;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.print-toc {
+  margin: 20px 0 8px;
+  padding: 14px 20px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.print-toc__title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.print-toc ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.print-toc li {
+  margin: 4px 0;
+}
+
+.print-toc__type {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.print-block {
+  margin-top: 32px;
+  padding-top: 12px;
+  border-top: 2px solid #111;
+}
+
+.print-block__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.print-block__title {
+  font-size: 22px;
+}
+
+.print-block__type {
+  font-size: 12px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.print-block__description {
+  margin: 8px 0 0;
+  color: #475569;
+}
+
+.print-block__cover {
+  display: block;
+  width: 100%;
+  max-height: 280px;
+  margin: 12px 0 4px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.print-slide {
+  margin-top: 18px;
+}
+
+.print-slide__title {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  font-size: 16px;
+  background: #f1f5f9;
+  border-left: 4px solid #111;
+  border-radius: 6px;
+}
+
+.print-slide__index {
+  font-size: 13px;
+  color: #64748b;
+}
+
+/*
+ * Ряд печати — та же сетка из 12 колонок, что и в редакторе (contentRowSpans):
+ * 33 % = 4 колонки, поэтому три блока по 33 % встают в один ряд и на бумаге.
+ */
+.print-row {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 14px;
+  align-items: flex-start;
+  margin-top: 12px;
+}
+
+.print-cell {
+  min-width: 0;
+}
+
+.print-video {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.print-video__caption {
+  margin: 4px 0 0;
+  color: #64748b;
+}
+
+.print-label {
+  display: block;
+  font-size: 11px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.print-empty {
+  margin: 8px 0;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.print-question {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  break-inside: avoid;
+}
+
+.print-question__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.print-question__num {
+  font-weight: 700;
+}
+
+.print-question__group {
+  margin-left: auto;
+}
+
+.print-question__text {
+  margin: 6px 0;
+  font-weight: 600;
+}
+
+.print-options {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.print-option {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  padding: 2px 0;
+}
+
+.print-option__mark {
+  width: 1.2em;
+  font-weight: 700;
+  color: #0f7b3f;
+}
+
+.print-pairs {
+  margin-top: 8px;
+  border-collapse: collapse;
+}
+
+.print-pairs td {
+  padding: 4px 10px;
+  border: 1px solid #cbd5e1;
+}
+
+.print-qcard {
+  margin: 6px 0 0;
+}
+
+.print-qcard dd {
+  margin: 2px 0 8px;
+}
+
+.print-question__explanation {
+  margin-top: 10px;
+  padding: 8px 10px;
+  font-size: 14px;
+  background: #f8fafc;
+  border-left: 3px solid #94a3b8;
+}
+
+.print-memo {
+  margin-top: 14px;
+  break-inside: avoid;
+}
+
+.print-memo__title {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.print-memo__cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.print-memo__card {
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  break-inside: avoid;
+}
+
+.print-memo__card-title {
+  margin: 0 0 8px;
+  padding-bottom: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.print-memo__card-title p,
+.print-memo__card-title h1,
+.print-memo__card-title h2,
+.print-memo__card-title h3 {
+  margin: 0;
+  font-size: 1em;
+}
+
+.print-memo__card-title p + p {
+  margin-top: 3px;
+}
+
+@media print {
+  .print-memo__cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .print-memo__cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.print-glossary {
+  margin: 12px 0 0;
+}
+
+.print-glossary__item {
+  margin-top: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.print-glossary dt {
+  font-weight: 700;
+}
+
+.print-glossary dd {
+  margin: 2px 0 0;
+  color: #334155;
+}
+
+.print-doc__footer {
+  margin-top: 36px;
+  padding-top: 12px;
+  font-size: 12px;
+  color: #94a3b8;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* Внутри документа ссылки читаются на бумаге, кнопки кода не нужны */
+.print-doc a {
+  color: #111;
+  text-decoration: underline;
+}
+
+/* Код на бумаге: тёмный экранный фон не печатаем — чёрный текст на белом.
+   Номера строк скрываем: при переносе длинных строк жёлоб разъехался бы. */
+.print-doc .content-code-wrap,
+.print-doc .content-code__head,
+.print-doc .code-surface,
+.print-doc .content-code {
+  color: #111;
+  background: #fff;
+  border-color: #cbd5e1;
+}
+
+.print-doc .code-surface__gutter {
+  display: none;
+}
+
+.print-doc .content-code__language,
+.print-doc .content-code__filename,
+.print-doc .code-surface .content-link {
+  color: #111;
+}
+
+.print-doc .content-code {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.print-doc .content-code code {
+  display: inline;
+  color: #111;
+  background: none;
+  white-space: inherit;
+}
+
+.print-doc .code-surface .inline-note {
+  border-bottom-color: #111;
+}
+
+.print-doc .code-surface .inline-note__mark {
+  color: #111;
+}
+
+.print-doc .content-code__head .icon-btn {
+  display: none;
+}
+
+.print-doc .content-image {
+  margin: 0;
+}
+
+.print-doc .content-image img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Картинка с обрезкой: inline-стили задают увеличенную картинку внутри рамки */
+.print-doc .content-image .content-image__img {
+  max-width: none;
+}
+
+/* Маркеры печатаются кружками с номерами; лупа и подсказки — только на экране */
+.print-doc .content-image__zoom {
+  display: none;
+}
+
+.print-doc .content-image__marker {
+  width: 22px;
+  height: 22px;
+  background: #fff;
+  border-color: #111;
+  box-shadow: none;
+}
+
+.print-doc .content-image__marker-number {
+  color: #111;
+}
+
+/* Рамки выделения печатаются теми же цветами, что и на экране */
+.print-doc .image-shape {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* Примечания к тексту (Правка 5): номер печатается чёрным, подсказки — экранные */
+.print-doc .inline-note {
+  border-bottom: 1px dashed #111;
+}
+
+.print-doc .inline-note__mark {
+  color: #111;
+  font-weight: 700;
+}
+
+/*
+ * Диалог: реплика не рвётся между страницами, облако печатается со своим фоном
+ * и рамкой (print-color-adjust: exact), аватар ужимается до строки текста —
+ * на экране размер задаёт автор (40–240 px), в PDF он был бы великоват.
+ */
+.print-doc .content-dialog {
+  gap: 10px;
+}
+
+.print-doc .content-dialog__item,
+.print-doc .content-dialog__line {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.print-doc .content-dialog__avatar {
+  width: 56px;
+  height: 56px;
+  font-size: 22px;
+}
+
+.print-doc .content-dialog__bubble {
+  padding: 12px 16px;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/*
+ * «Важное»: блок печатается своим фоном и рамкой (цвет выбирает автор),
+ * поэтому браузеру разрешаем печатать фоновые цвета.
+ */
+.print-doc .content-important {
+  break-inside: avoid;
+  page-break-inside: avoid;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+
+/* ===== Узкий экран: документ читается без горизонтальных полос (Шаг 16) ===== */
+
+@media (max-width: 900px) {
+  .print-doc {
+    padding: 32px 28px;
+  }
+}
+
+@media (max-width: 640px) {
+  .print-app {
+    padding: 12px 8px 40px;
+  }
+
+  .print-toolbar {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .print-toolbar__title {
+    width: 100%;
+  }
+
+  .print-toolbar__spacer {
+    display: none;
+  }
+
+  .print-doc {
+    padding: 22px 16px;
+    border-radius: 10px;
+  }
+
+  .print-doc__title {
+    font-size: 22px;
+  }
+
+  .print-block__title {
+    font-size: 18px;
+  }
+
+  .print-slide__title {
+    font-size: 15px;
+  }
+
+  .print-toc {
+    padding: 12px 14px;
+  }
+
+  /* Ряды слайда в одну колонку: блок остаётся на всю ширину листа */
+  .print-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .print-cell {
+    grid-column: 1 / -1 !important;
+  }
+
+  .print-pairs {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+  }
+}
+
+/* ===== Печать ===== */
+@page {
+  size: A4;
+  margin: 14mm 12mm;
+}
+
+@media print {
+  html,
+  body,
+  #root {
+    height: auto;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+  }
+
+  .app-header,
+  .mode-toggle,
+  .btn,
+  .breadcrumbs,
+  .print-toolbar,
+  .print-status .btn {
+    display: none !important;
+  }
+
+  /* Подсказки и поля примечаний — экранные элементы, на бумаге не нужны */
+  .note-tip,
+  .note-popover {
+    display: none !important;
+  }
+
+  .app-main {
+    max-width: none;
+    padding: 0;
+  }
+
+  .print-app {
+    min-height: auto;
+    padding: 0;
+    background: #fff;
+  }
+
+  .print-doc {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    border-radius: 0;
+  }
+
+  .print-block {
+    margin-top: 20px;
+    padding-top: 10px;
+    break-before: page;
+  }
+
+  .print-block:first-of-type {
+    break-before: auto;
+  }
+
+  .print-slide,
+  .print-row,
+  .content-image,
+  .content-table-wrap,
+  .print-pairs {
+    break-inside: avoid;
+  }
+
+  .print-toc {
+    background: #fff;
+  }
+
+  .print-doc a {
+    color: #000;
+    text-decoration: none;
+  }
+
+  .empty-state {
+    border: none;
+  }
+
+  a {
+    color: #000;
+    text-decoration: none;
+  }
+}
+

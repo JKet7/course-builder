@@ -1,0 +1,54 @@
+/*
+ * CSS-переменные темы. Значения по умолчанию = тема «Классическая»
+ * (та же, что создаётся в prisma/seed.js).
+ *
+ * Шаг 12: выбранную пользователем тему применяет applyTheme из utils/themes.js —
+ * она выставляет те же переменные инлайном на <html>, поэтому перекрывает :root.
+ */
+:root {
+  --font-base: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', Consolas, 'Courier New', monospace;
+
+  --color-bg: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-surface-alt: #eef1f5;
+  --color-border: #d9dee7;
+  --color-text: #1f2937;
+  --color-text-muted: #6b7280;
+
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-text: #ffffff;
+
+  --color-danger: #b91c1c;
+  --color-danger-bg: #fee2e2;
+
+  --color-important: #fde8f3;
+  /* Рамка блока «Важное» — на 18 % темнее фона (см. utils/important.js) */
+  --color-important-border: #cfbec7;
+
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+/* Тёмный пресет из themes.css: используется, если data-theme='dark' выставили вручную */
+:root[data-theme='dark'] {
+  --color-bg: #111827;
+  --color-surface: #1f2937;
+  --color-surface-alt: #273449;
+  --color-border: #374151;
+  --color-text: #f3f4f6;
+  --color-text-muted: #9ca3af;
+
+  --color-primary: #60a5fa;
+  --color-primary-hover: #93c5fd;
+  --color-primary-text: #111827;
+
+  --color-danger: #fca5a5;
+  --color-danger-bg: #45201f;
+
+  --color-important: #4a1d3a;
+  --color-important-border: #3d1830;
+
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+

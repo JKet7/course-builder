@@ -1,0 +1,95 @@
+import {
+  AlertCircle, AlignCenter, AlignLeft, AlignRight, ArrowLeft, ArrowRight, BookOpen, Bold, Check, CheckSquare,
+  ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Circle, CircleHelp, ClipboardList, ClipboardPaste, Code, Combine, Copy, Crop, Download, Eraser, Eye,
+  ExternalLink, FileText, GripVertical, Heading1, Highlighter, Image, Italic, Layers, Link2, List,
+  ListIndentDecrease, ListIndentIncrease, ListOrdered, ListTree, Loader2, LogOut, Menu, MessageSquare,
+  MessageSquarePlus, Minus,
+  MoreVertical, Palette, Pencil, Play, Plus,
+  Printer, RefreshCw, Redo2, Save, Search, Settings, Square, Strikethrough, Table, Trash2, Triangle, Type, Underline,
+  Ungroup, Undo2, Upload, User, Video, X,
+} from 'lucide-react';
+
+/** Реестр используемых иконок (Lucide). */
+const ICONS = {
+  alert: AlertCircle,
+  alignCenter: AlignCenter,
+  alignLeft: AlignLeft,
+  alignRight: AlignRight,
+  arrowLeft: ArrowLeft,
+  arrowRight: ArrowRight,
+  bold: Bold,
+  book: BookOpen,
+  check: Check,
+  checklist: CheckSquare,
+  chevronDown: ChevronDown,
+  chevronLeft: ChevronLeft,
+  chevronRight: ChevronRight,
+  chevronUp: ChevronUp,
+  circle: Circle,
+  clipboard: ClipboardList,
+  code: Code,
+  copy: Copy,
+  crop: Crop,
+  download: Download,
+  eraser: Eraser,
+  external: ExternalLink,
+  eye: Eye,
+  file: FileText,
+  grip: GripVertical,
+  heading: Heading1,
+  help: CircleHelp,
+  highlight: Highlighter,
+  image: Image,
+  indentDecrease: ListIndentDecrease,
+  indentIncrease: ListIndentIncrease,
+  italic: Italic,
+  layers: Layers,
+  link: Link2,
+  list: List,
+  listOrdered: ListOrdered,
+  listTree: ListTree,
+  loader: Loader2,
+  logout: LogOut,
+  menu: Menu,
+  merge: Combine,
+  minus: Minus,
+  more: MoreVertical,
+  note: MessageSquarePlus,
+  palette: Palette,
+  paste: ClipboardPaste,
+  pencil: Pencil,
+  play: Play,
+  plus: Plus,
+  printer: Printer,
+  redo: Redo2,
+  refresh: RefreshCw,
+  replica: MessageSquare,
+  save: Save,
+  search: Search,
+  settings: Settings,
+  square: Square,
+  strike: Strikethrough,
+  table: Table,
+  trash: Trash2,
+  triangle: Triangle,
+  type: Type,
+  underline: Underline,
+  undo: Undo2,
+  unmerge: Ungroup,
+  upload: Upload,
+  user: User,
+  video: Video,
+  x: X,
+};
+
+/** <Icon name="plus" size={16} /> */
+export default function Icon({ name, size = 18, className = '', ...props }) {
+  const Component = ICONS[name];
+
+  if (!Component) {
+    console.warn(`[Icon] неизвестная иконка: ${name}`);
+    return null;
+  }
+
+  return <Component size={size} className={['icon', className].filter(Boolean).join(' ')} aria-hidden="true" {...props} />;
+}

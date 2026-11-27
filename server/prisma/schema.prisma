@@ -1,0 +1,317 @@
+// Конструктор курсов — схема БД (Шаг 1)
+// ВАЖНО: SQLite в Prisma не поддерживает enum, поэтому значения ролей/статусов/типов
+// хранятся в String. Допустимые значения перечислены в комментариях к полям.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------- User
+model User {
+  id            String   @id @default(cuid())
+  login         String   @unique
+  passwordHash  String
+  role          String   @default("reader") // admin | editor | reader
+  activeThemeId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  activeTheme Theme?     @relation("ActiveTheme", fields: [activeThemeId], references: [id], onDelete: SetNull)
+  themes      Theme[]    @relation("ThemeOwner")
+  files       File[]
+  progress    Progress[]
+  auditLogs   AuditLog[]
+}
+
+// ---------------------------------------------------------------- Course
+model Course {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  blocks Block[]
+
+  @@index([order])
+}
+
+// ---------------------------------------------------------------- Block
+model Block {
+  id          String   @id @default(cuid())
+  courseId    String
+  type        String // theory | test | memo | glossary
+  title       String
+  description String?
+  coverImage  String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course       Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  slides       TheorySlide[]
+  groups       TestGroup[]
+  questions    TestQuestion[]
+  sections     TestSection[]
+  testSettings TestSettings?
+  memoSlides   MemoSlide[]
+  memoCells  MemoCell[]
+  terms      GlossaryTerm[]
+  progress  Progress[]
+
+  @@index([courseId])
+  @@index([courseId, order])
+}
+
+// ---------------------------------------------------------------- Теория
+model TheorySlide {
+  id      String  @id @default(cuid())
+  blockId String
+  title   String?
+  order   Int     @default(0)
+
+  block    Block           @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  contents TheoryContent[]
+
+  @@index([blockId])
+  @@index([blockId, order])
+}
+
+model TheoryContent {
+  id          String   @id @default(cuid())
+  slideId     String
+  type        String // text | image | video | table | important | checklist | code | replica
+  data        Json
+  dataVersion Int      @default(1) // константа сервера CURRENT_DATA_VERSION
+  width       Int      @default(100) // ширина колонки в ряду слайда: 33 | 50 | 66 | 100 (Шаг 9)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  slide    TheorySlide @relation(fields: [slideId], references: [id], onDelete: Cascade)
+  comments Comment[]
+
+  @@index([slideId])
+  @@index([slideId, order])
+}
+
+// ---------------------------------------------------------------- Тесты
+model TestGroup {
+  id      String @id @default(cuid())
+  blockId String
+  name    String
+  order   Int    @default(0)
+
+  block     Block          @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  questions TestQuestion[]
+
+  @@index([blockId])
+  @@index([blockId, order])
+}
+
+// ---------------------------------------------------------------- Ветвление
+// Раздел — точка ветвления и группа вопросов (аналог секции Google Forms).
+// `result` — итоговый комментарий, который читатель видит, если путь
+// закончился на этом разделе (Tiptap JSON).
+model TestSection {
+  id      String  @id @default(cuid())
+  blockId String
+  title   String
+  result  Json?
+  order   Int     @default(0)
+
+  block         Block          @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  questions     TestQuestion[]
+  optionTargets TestOption[]   @relation("OptionTarget")
+
+  @@index([blockId])
+  @@index([blockId, order])
+}
+
+// Настройки теста: перемешивание и режим ветвления + итог всего теста.
+model TestSettings {
+  blockId          String  @id
+  shuffleQuestions Boolean @default(false)
+  shuffleOptions   Boolean @default(false)
+  branching        Boolean @default(false)
+  result           Json?
+
+  block Block @relation(fields: [blockId], references: [id], onDelete: Cascade)
+}
+
+model TestQuestion {
+  id          String  @id @default(cuid())
+  blockId     String
+  groupId     String?
+  sectionId   String?
+  type        String // single | multiple | match | card
+  data        Json // структура зависит от type (для card: front/back/frontImage/backImage)
+  explanation Json? // Tiptap JSON
+  order       Int     @default(0)
+
+  block   Block        @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  group   TestGroup?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  section TestSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  options TestOption[]
+  pairs   TestPair[]
+
+  @@index([blockId])
+  @@index([blockId, order])
+  @@index([groupId])
+  @@index([sectionId])
+}
+
+model TestOption {
+  id              String  @id @default(cuid())
+  questionId      String
+  text            String
+  isCorrect       Boolean @default(false)
+  order           Int     @default(0)
+  // Логика перехода: next — следующий вопрос, section — раздел, submit — завершить
+  targetType      String  @default("next")
+  targetSectionId String?
+
+  question      TestQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  targetSection TestSection? @relation("OptionTarget", fields: [targetSectionId], references: [id], onDelete: SetNull)
+
+  @@index([questionId])
+  @@index([targetSectionId])
+}
+
+model TestPair {
+  id         String @id @default(cuid())
+  questionId String
+  left       String
+  right      String
+  order      Int    @default(0)
+
+  question TestQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+}
+
+// ---------------------------------------------------------------- Памятка
+// Слайд памятки — верхний уровень: заголовок и порядок. Карточки слайда
+// (MemoCell) лежат в собственной сетке, как раньше; несколько слайдов
+// показываются по одному через содержание.
+model MemoSlide {
+  id      String @id @default(cuid())
+  blockId String
+  title   String
+  order   Int    @default(0)
+
+  block Block      @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  cells MemoCell[]
+
+  @@index([blockId])
+  @@index([blockId, order])
+}
+
+model MemoCell {
+  id       String @id @default(cuid())
+  blockId  String
+  slideId  String
+  title    String // простой текст заголовка — для поиска и старых записей
+  titleDoc Json? // Tiptap JSON форматированного заголовка (ссылки, курсив, выравнивание)
+  body     Json // Tiptap JSON или { version: 2, contents: [...] }
+  order    Int    @default(0)
+
+  block Block     @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  slide MemoSlide @relation(fields: [slideId], references: [id], onDelete: Cascade)
+
+  @@index([blockId])
+  @@index([slideId])
+  @@index([slideId, order])
+}
+
+// ---------------------------------------------------------------- Глоссарий
+model GlossaryTerm {
+  id         String @id @default(cuid())
+  blockId    String
+  term       String // сортировка на клиенте по term (Intl.Collator('ru')), order не нужен
+  definition Json // Tiptap JSON
+
+  block Block @relation(fields: [blockId], references: [id], onDelete: Cascade)
+
+  @@index([blockId])
+}
+
+// ---------------------------------------------------------------- Темы
+model Theme {
+  id        String   @id @default(cuid())
+  name      String
+  colors    Json
+  isGlobal  Boolean  @default(false)
+  ownerId   String? // null → глобальная тема
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner       User?  @relation("ThemeOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  activeUsers User[] @relation("ActiveTheme")
+
+  @@index([ownerId])
+}
+
+// ---------------------------------------------------------------- Прогресс
+model Progress {
+  id           String   @id @default(cuid())
+  userId       String
+  blockId      String
+  status       String   @default("not_started") // not_started | in_progress | completed
+  progressData Json?
+  updatedAt    DateTime @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  block Block @relation(fields: [blockId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, blockId])
+  @@index([blockId])
+}
+
+// ---------------------------------------------------------------- Комментарии (только теория)
+model Comment {
+  id        String   @id @default(cuid())
+  contentId String
+  text      String
+  position  Json // { from, to, markId }
+  createdAt DateTime @default(now())
+
+  content TheoryContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@index([contentId])
+}
+
+// ---------------------------------------------------------------- Файлы
+model File {
+  id         String   @id @default(cuid())
+  path       String
+  mimeType   String
+  size       Int
+  uploadedBy String?
+  createdAt  DateTime @default(now())
+
+  uploader User? @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
+
+  @@index([uploadedBy])
+}
+
+// ---------------------------------------------------------------- Аудит
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String // create | update | delete
+  entity    String
+  entityId  String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([entity, entityId])
+}
