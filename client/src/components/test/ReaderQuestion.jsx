@@ -4,12 +4,11 @@ import Icon from '../ui/Icon.jsx';
 import { TiptapContent } from '../content/ContentRenderer.jsx';
 import { getQuestionTypeLabel } from '../../utils/helpers.js';
 import {
-  ANSWERED_VERDICT,
+  canSubmit,
   correctLabel,
   isResolved,
   matchProgress,
   questionTitle,
-  selectionVerdict,
 } from '../../utils/testRun.js';
 
 /** Порядок из попытки + недостающие элементы (вопрос отредактировали после старта). */
@@ -57,8 +56,14 @@ function Feedback({ question, answer, graded, onLinkClick }) {
   );
 }
 
-/** Вертикальный список вариантов «Один ответ» / «Несколько ответов». */
-function ChoiceQuestion({ question, answer, draft, optionOrder, graded, onAnswer, onDraft, onLinkClick }) {
+/**
+ * Вертикальный список вариантов «Один ответ» / «Несколько ответов».
+ *
+ * Клик только отмечает вариант: проверки и подсветки «верно / неверно» здесь
+ * нет. Выбор живёт в черновике попытки, поэтому его можно менять сколько
+ * угодно (в том числе снять) — проверка начинается по кнопке «Готово».
+ */
+function ChoiceQuestion({ question, answer, draft, optionOrder, graded, onDraft, onLinkClick }) {
   const options = question.options ?? [];
   const optionById = new Map(options.map((option) => [option.id, option]));
   const ids = orderedIds(options, optionOrder);
@@ -68,41 +73,16 @@ function ChoiceQuestion({ question, answer, draft, optionOrder, graded, onAnswer
   const choose = (option) => {
     if (resolved) return;
 
-    // В режиме ветвления проверки нет: выбор только записывается.
-    if (!graded) {
-      if (question.type === 'single') {
-        onAnswer({ selected: [option.id], verdict: ANSWERED_VERDICT });
-        return;
-      }
-
-      const next = selected.includes(option.id)
-        ? selected.filter((id) => id !== option.id)
-        : [...selected, option.id];
-      onDraft({ selected: next });
-      return;
-    }
-
+    // Повторный клик по выбранному варианту снимает выбор.
     if (question.type === 'single') {
-      const next = [option.id];
-      onAnswer({ selected: next, verdict: selectionVerdict(question, next) ?? 'wrong' });
+      onDraft({ selected: selected.includes(option.id) ? [] : [option.id] });
       return;
     }
 
     const next = selected.includes(option.id)
       ? selected.filter((id) => id !== option.id)
       : [...selected, option.id];
-    const verdict = selectionVerdict(question, next);
-
-    // Мгновенная проверка: лишний вариант — сразу ошибка, полный набор верных — успех.
-    if (verdict) onAnswer({ selected: next, verdict });
-    else onDraft({ selected: next });
-  };
-
-  const submitPartial = () => {
-    if (resolved || selected.length === 0) return;
-
-    const verdict = graded ? selectionVerdict(question, selected) ?? 'wrong' : ANSWERED_VERDICT;
-    onAnswer({ selected, verdict });
+    onDraft({ selected: next });
   };
 
   return (
@@ -141,26 +121,19 @@ function ChoiceQuestion({ question, answer, draft, optionOrder, graded, onAnswer
         })}
       </ul>
 
-      {question.type === 'multiple' && !resolved && selected.length > 0 && (
-        <div className="test-options__submit">
-          <Button size="sm" onClick={submitPartial}>
-            Ответить
-          </Button>
-          <span className="test-options__hint">
-            {graded
-              ? 'Отметьте все верные варианты. Лишний вариант сразу засчитает ошибку.'
-              : 'Отметьте подходящие варианты и нажмите «Ответить».'}
-          </span>
-        </div>
-      )}
-
       <Feedback question={question} answer={answer} graded={graded} onLinkClick={onLinkClick} />
     </>
   );
 }
 
-/** Две колонки: клик по понятию слева, затем по значению справа. */
-function MatchQuestion({ question, answer, draft, pairOrder, graded, onAnswer, onDraft, onLinkClick }) {
+/**
+ * Две колонки: клик по понятию слева, затем по значению справа.
+ *
+ * Пары собираются без проверки: соединение можно менять (клик по понятию
+ * снимает его пару) вплоть до нажатия «Готово». Оценка появляется только после
+ * отправки ответа.
+ */
+function MatchQuestion({ question, answer, draft, pairOrder, graded, onDraft, onLinkClick }) {
   const pairs = question.pairs ?? [];
   const pairById = new Map(pairs.map((pair) => [pair.id, pair]));
   const rightIds = orderedIds(pairs, pairOrder);
@@ -170,44 +143,28 @@ function MatchQuestion({ question, answer, draft, pairOrder, graded, onAnswer, o
   const usedRight = new Set(Object.values(matches));
 
   const [activeLeft, setActiveLeft] = useState(null);
-  const [wrongRight, setWrongRight] = useState(null);
-
-  const shakeRight = (id) => {
-    setWrongRight(id);
-    setTimeout(() => setWrongRight((current) => (current === id ? null : current)), 600);
-  };
 
   const pickLeft = (pair) => {
-    if (resolved || matches[pair.id] !== undefined) return;
+    if (resolved) return;
+
+    // Уже соединённое понятие освобождаем: читатель хочет выбрать другое значение.
+    if (matches[pair.id] !== undefined) {
+      const next = { ...matches };
+      delete next[pair.id];
+      onDraft({ matches: next });
+      setActiveLeft(pair.id);
+      return;
+    }
+
     setActiveLeft((current) => (current === pair.id ? null : pair.id));
   };
 
   const pickRight = (rightId) => {
     if (resolved || !activeLeft) return;
 
-    // В режиме ветвления верных пар нет: любое соединение просто принимается.
-    if (!graded) {
-      const next = { ...matches, [activeLeft]: rightId };
-      setActiveLeft(null);
-
-      if (matchProgress(question, next).complete) onAnswer({ matches: next, verdict: ANSWERED_VERDICT });
-      else onDraft({ matches: next });
-      return;
-    }
-
-    if (activeLeft === rightId) {
-      const next = { ...matches, [activeLeft]: rightId };
-      setActiveLeft(null);
-
-      if (matchProgress(question, next).complete) onAnswer({ matches: next, verdict: 'correct' });
-      else onDraft({ matches: next });
-      return;
-    }
-
-    // Неверная пара: красная тряска, вопрос закрывается первой ошибкой.
+    const next = { ...matches, [activeLeft]: rightId };
     setActiveLeft(null);
-    shakeRight(rightId);
-    onAnswer({ matches, verdict: 'wrong' });
+    onDraft({ matches: next });
   };
 
   return (
@@ -230,7 +187,7 @@ function MatchQuestion({ question, answer, draft, pairOrder, graded, onAnswer, o
                 key={pair.id}
                 className={classes}
                 data-pair-id={pair.id}
-                disabled={resolved || matched}
+                disabled={resolved}
                 aria-pressed={activeLeft === pair.id}
                 onClick={() => pickLeft(pair)}
               >
@@ -244,9 +201,7 @@ function MatchQuestion({ question, answer, draft, pairOrder, graded, onAnswer, o
           {rightIds.map((id) => {
             const pair = pairById.get(id);
             const matched = usedRight.has(id);
-            const classes = ['test-match__tile', matched ? 'is-matched' : '', wrongRight === id ? 'is-wrong' : '']
-              .filter(Boolean)
-              .join(' ');
+            const classes = ['test-match__tile', matched ? 'is-matched' : ''].filter(Boolean).join(' ');
 
             return (
               <button
@@ -264,15 +219,22 @@ function MatchQuestion({ question, answer, draft, pairOrder, graded, onAnswer, o
         </div>
       </div>
 
-      {!resolved && <p className="test-match__hint">Нажмите понятие слева, затем его значение справа.</p>}
+      {!resolved && (
+        <p className="test-match__hint">
+          Нажмите понятие слева, затем его значение справа. Чтобы поменять пару, нажмите на понятие ещё раз.
+        </p>
+      )}
 
       <Feedback question={question} answer={answer} graded={graded} onLinkClick={onLinkClick} />
     </>
   );
 }
 
-/** Карточка: передняя сторона, две круглые кнопки и переворот после ответа. */
-function CardQuestion({ question, answer, graded, onAnswer }) {
+/**
+ * Карточка: передняя сторона, две круглые кнопки и переворот после ответа.
+ * «Знаю / Не знаю» — это и есть ответ, поэтому он сразу уходит в проверку.
+ */
+function CardQuestion({ question, answer, graded, onSubmit }) {
   const data = question.data ?? {};
   const resolved = isResolved(answer);
   const know = answer?.know ?? (answer?.verdict === 'correct' ? true : answer?.verdict === 'wrong' ? false : null);
@@ -302,7 +264,7 @@ function CardQuestion({ question, answer, graded, onAnswer }) {
           aria-label="Не знаю"
           title="Не знаю"
           disabled={resolved}
-          onClick={() => onAnswer({ know: false, verdict: graded ? 'wrong' : ANSWERED_VERDICT })}
+          onClick={() => onSubmit({ know: false })}
         >
           <span className="test-flashcard__round" aria-hidden="true">
             <Icon name="x" size={22} />
@@ -316,7 +278,7 @@ function CardQuestion({ question, answer, graded, onAnswer }) {
           aria-label="Знаю"
           title="Знаю"
           disabled={resolved}
-          onClick={() => onAnswer({ know: true, verdict: graded ? 'correct' : ANSWERED_VERDICT })}
+          onClick={() => onSubmit({ know: true })}
         >
           <span className="test-flashcard__round" aria-hidden="true">
             <Icon name="check" size={22} />
@@ -335,9 +297,25 @@ function CardQuestion({ question, answer, graded, onAnswer }) {
 }
 
 /**
- * Текущий вопрос читателя. В тесте с оценкой оценка фиксируется первой попыткой:
- * после ответа варианты блокируются, появляется подсветка и плашка с пояснением.
- * В режиме ветвления верных ответов нет — выбор только ведёт по пути.
+ * Подсказка рядом с кнопкой «Готово»: до отправки выбор можно менять.
+ */
+function submitHint(question, graded, ready) {
+  if (question.type === 'match') {
+    return ready ? 'Пары можно менять до нажатия «Готово».' : 'Соедините все пары и нажмите «Готово».';
+  }
+
+  if (!graded) return ready ? 'Кнопка «Готово» зафиксирует выбор.' : 'Отметьте вариант, чтобы продолжить.';
+
+  return ready
+    ? 'Выбор можно менять до нажатия «Готово».'
+    : 'Отметьте вариант ответа и нажмите «Готово».';
+}
+
+/**
+ * Текущий вопрос читателя. Выбор варианта — черновик: подсветки «верно /
+ * неверно» нет, ответ можно менять до нажатия «Готово» в правом нижнем углу
+ * карточки вопроса. Только «Готово» фиксирует ответ, проверяет его (в тесте с
+ * оценкой) и блокирует варианты. В режиме ветвления выбор ведёт по пути.
  */
 export default function ReaderQuestion({
   question,
@@ -348,11 +326,15 @@ export default function ReaderQuestion({
   optionOrder,
   pairOrder,
   graded = true,
-  onAnswer,
+  onSubmit,
   onDraft,
   onLinkClick,
 }) {
   const resolved = isResolved(answer);
+  const selected = answer?.selected ?? draft?.selected ?? [];
+  const matches = answer?.matches ?? draft?.matches ?? {};
+  const value = question.type === 'match' ? { matches } : { selected };
+  const ready = canSubmit(question, value);
 
   return (
     <article className="test-question" data-question-id={question.id}>
@@ -385,7 +367,6 @@ export default function ReaderQuestion({
           draft={draft}
           optionOrder={optionOrder}
           graded={graded}
-          onAnswer={onAnswer}
           onDraft={onDraft}
           onLinkClick={onLinkClick}
         />
@@ -398,14 +379,22 @@ export default function ReaderQuestion({
           draft={draft}
           pairOrder={pairOrder}
           graded={graded}
-          onAnswer={onAnswer}
           onDraft={onDraft}
           onLinkClick={onLinkClick}
         />
       )}
 
       {question.type === 'card' && (
-        <CardQuestion question={question} answer={answer} graded={graded} onAnswer={onAnswer} />
+        <CardQuestion question={question} answer={answer} graded={graded} onSubmit={onSubmit} />
+      )}
+
+      {question.type !== 'card' && !resolved && (
+        <div className="test-question__submit">
+          <span className="test-question__submit-hint">{submitHint(question, graded, ready)}</span>
+          <Button onClick={() => onSubmit(value)} disabled={!ready}>
+            Готово
+          </Button>
+        </div>
       )}
     </article>
   );

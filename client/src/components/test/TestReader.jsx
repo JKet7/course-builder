@@ -13,6 +13,7 @@ import {
   elapsedSeconds,
   finishRun,
   formatDuration,
+  gradeAnswer,
   isResolved,
   nextQuestionId,
   orderedQuestions,
@@ -30,11 +31,13 @@ import { writeEditorState } from '../../utils/testEditorMemory.js';
  * Режим читателя блока «Тест»: прохождение по одному вопросу.
  *
  * Слева — вопрос, снизу — «Назад / Дальше», справа — сетка навигации со
- * статусами вопросов. В тесте с оценкой ответ проверяется сразу, в режиме
- * ветвления выбор только ведёт читателя по пути (оценки нет). Попытка (порядок
- * вопросов и вариантов, ответы, черновики, таймер) хранится в localStorage и
- * переживает перезагрузку. Каждый вход в читателя ставит таймер на паузу при
- * уходе и возобновляет при возврате; после завершения показывается экран итогов.
+ * статусами вопросов. Выбор варианта ничего не проверяет: читатель может менять
+ * его до кнопки «Готово» в правом нижнем углу вопроса, и только она фиксирует
+ * ответ и запускает проверку. В режиме ветвления выбор ведёт читателя по пути
+ * (оценки нет). Попытка (порядок вопросов и вариантов, ответы, черновики,
+ * таймер) хранится в localStorage и переживает перезагрузку. Каждый вход в
+ * читателя ставит таймер на паузу при уходе и возобновляет при возврате; после
+ * завершения показывается экран итогов.
  */
 export default function TestReader({ block }) {
   const storeBlockId = useTestStore((state) => state.blockId);
@@ -176,6 +179,13 @@ export default function TestReader({ block }) {
   const currentAnswer = currentQuestion ? activeRun?.answers?.[currentQuestion.id] : null;
   const resolved = isResolved(currentAnswer);
 
+  // Подсказка подвала: ответ фиксируется кнопкой «Готово» (у карточки — своими кнопками).
+  const footerHint = resolved
+    ? 'Ответ зафиксирован'
+    : currentQuestion?.type === 'card'
+      ? 'Нажмите «Знаю» или «Не знаю», чтобы продолжить'
+      : 'Выберите вариант и нажмите «Готово»';
+
   const progress = useMemo(() => runProgress(activeRun), [activeRun]);
   const elapsed = elapsedSeconds(activeRun, now);
 
@@ -225,6 +235,11 @@ export default function TestReader({ block }) {
     goTo(targetId);
   };
 
+  /**
+   * Фиксация ответа по кнопке «Готово» (карточка отправляет его сразу своими
+   * кнопками). Выбор варианта до этого живёт в черновике, поэтому вердикт
+   * появляется только здесь; в режиме ветвления оценки нет.
+   */
   const answerQuestion = (value) => {
     if (!currentQuestion) return;
 
@@ -241,7 +256,7 @@ export default function TestReader({ block }) {
         ...previous,
         answers: {
           ...previous.answers,
-          [questionId]: { ...value, at: Date.now() },
+          [questionId]: { ...gradeAnswer(currentQuestion, value, graded), at: Date.now() },
         },
         picks,
       };
@@ -425,7 +440,7 @@ export default function TestReader({ block }) {
             optionOrder={activeRun.optionOrder?.[currentQuestion.id]}
             pairOrder={activeRun.pairOrder?.[currentQuestion.id]}
             graded={graded}
-            onAnswer={answerQuestion}
+            onSubmit={answerQuestion}
             onDraft={draftAnswer}
             onLinkClick={onInternalLink}
           />
@@ -440,9 +455,7 @@ export default function TestReader({ block }) {
               Назад
             </Button>
 
-            <span className="test-run__footer-hint">
-              {resolved ? 'Ответ зафиксирован' : 'Выберите ответ, чтобы продолжить'}
-            </span>
+            <span className="test-run__footer-hint">{footerHint}</span>
 
             <Button onClick={goNext} disabled={!resolved}>
               Дальше

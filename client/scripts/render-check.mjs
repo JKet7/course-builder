@@ -2229,6 +2229,8 @@ try {
     'test (view): подвал и завершение теста, легенды нет',
     testView.includes('test-run__footer') &&
       testView.includes('>Назад<') &&
+      // Порядок вопросов в попытке перемешан, поэтому подсказка зависит от типа.
+      (/Выберите вариант и нажмите «Готово»|Нажмите «Знаю» или «Не знаю»/.test(testView)) &&
       /disabled[^>]*>\s*Дальше/.test(testView) &&
       testView.includes('Завершить тест') &&
       !testView.includes('test-run__legend') &&
@@ -2261,15 +2263,40 @@ try {
     answer: null,
     draft: null,
     optionOrder: ['o-2', 'o-1'],
-    onAnswer: testNoop,
+    onSubmit: testNoop,
     onDraft: testNoop,
   });
   check(
-    'test (reader): один ответ — радио и порядок из попытки',
+    'test (reader): один ответ — радио, порядок из попытки и неактивное «Готово»',
     singleHtml.indexOf('Служба знаний') < singleHtml.indexOf('Средства защиты') &&
       singleHtml.includes('test-option__mark--radio') &&
       (singleHtml.match(/class="test-option[ "]/g) ?? []).length === 2 &&
+      singleHtml.includes('test-question__submit') &&
+      /disabled=""[^>]*>\s*Готово/.test(singleHtml) &&
       !singleHtml.includes('test-feedback'),
+  );
+
+  // Выбор до «Готово» — черновик: ни подсветки верного, ни плашки с вердиктом,
+  // ни блокировки вариантов. Кнопка «Готово» при этом активна.
+  const pickedHtml = render(ReaderQuestion, '/block/block-test', {
+    question: sampleQuestions[0],
+    index: 0,
+    total: 2,
+    answer: null,
+    draft: { selected: ['o-1'] },
+    optionOrder: ['o-1', 'o-2'],
+    onSubmit: testNoop,
+    onDraft: testNoop,
+  });
+  check(
+    'test (reader): выбор не проверяется и меняется до «Готово»',
+    pickedHtml.includes('test-option is-picked') &&
+      !pickedHtml.includes('is-correct') &&
+      !pickedHtml.includes('is-wrong') &&
+      !pickedHtml.includes('test-feedback') &&
+      !pickedHtml.includes('test-question__verdict') &&
+      pickedHtml.includes('Выбор можно менять до нажатия «Готово»') &&
+      !/disabled=""[^>]*>\s*Готово/.test(pickedHtml),
   );
 
   const resolvedHtml = render(ReaderQuestion, '/block/block-test', {
@@ -2278,14 +2305,15 @@ try {
     total: 2,
     answer: { selected: ['o-1'], verdict: 'correct' },
     optionOrder: ['o-1', 'o-2'],
-    onAnswer: testNoop,
+    onSubmit: testNoop,
     onDraft: testNoop,
   });
   check(
-    'test (reader): после проверки верный вариант подсвечен',
+    'test (reader): после «Готово» верный вариант подсвечен, кнопки нет',
     resolvedHtml.includes('test-option is-picked is-correct') &&
       resolvedHtml.includes('test-feedback is-correct') &&
-      resolvedHtml.includes('Верно!'),
+      resolvedHtml.includes('Верно!') &&
+      !resolvedHtml.includes('test-question__submit'),
   );
 
   const multipleHtml = render(ReaderQuestion, '/block/block-test', {
@@ -2294,14 +2322,16 @@ try {
     total: 2,
     answer: null,
     draft: { selected: ['o-3'] },
-    onAnswer: testNoop,
+    onSubmit: testNoop,
     onDraft: testNoop,
   });
   check(
-    'test (reader): несколько ответов — черновик и кнопка «Ответить»',
+    'test (reader): несколько ответов — чекбоксы и «Готово» вместо «Ответить»',
     multipleHtml.includes('test-option__mark--checkbox') &&
-      multipleHtml.includes('test-options__submit') &&
-      multipleHtml.includes('Ответить'),
+      multipleHtml.includes('test-question__submit') &&
+      multipleHtml.includes('Готово') &&
+      !multipleHtml.includes('Ответить') &&
+      !multipleHtml.includes('is-correct'),
   );
 
   const matchHtml = render(ReaderQuestion, '/block/block-test', {
@@ -2311,14 +2341,36 @@ try {
     answer: null,
     draft: null,
     pairOrder: ['p-2', 'p-1'],
-    onAnswer: testNoop,
+    onSubmit: testNoop,
     onDraft: testNoop,
   });
   check(
-    'test (reader): сопоставление — счётчик и подсказка',
+    'test (reader): сопоставление — счётчик, подсказка и неактивное «Готово»',
     matchHtml.includes('test-match') &&
       matchHtml.includes('Соединено 0 из 2') &&
-      matchHtml.includes('Нажмите понятие слева'),
+      matchHtml.includes('Нажмите понятие слева') &&
+      matchHtml.includes('Соедините все пары и нажмите «Готово»') &&
+      /disabled=""[^>]*>\s*Готово/.test(matchHtml),
+  );
+
+  // Все пары соединены, но ответа ещё нет: оценка не выносится, пары можно менять.
+  const matchDraftHtml = render(ReaderQuestion, '/block/block-test', {
+    question: sampleQuestions[2],
+    index: 2,
+    total: 2,
+    answer: null,
+    draft: { matches: { 'p-1': 'p-2', 'p-2': 'p-1' } },
+    pairOrder: ['p-2', 'p-1'],
+    onSubmit: testNoop,
+    onDraft: testNoop,
+  });
+  check(
+    'test (reader): сопоставление не проверяется до «Готово»',
+    matchDraftHtml.includes('Соединено 2 из 2') &&
+      matchDraftHtml.includes('Пары можно менять до нажатия «Готово»') &&
+      !matchDraftHtml.includes('test-feedback') &&
+      !matchDraftHtml.includes('is-wrong') &&
+      !/disabled=""[^>]*>\s*Готово/.test(matchDraftHtml),
   );
 
   const cardHtml = render(ReaderQuestion, '/block/block-test', {
@@ -2326,14 +2378,15 @@ try {
     index: 3,
     total: 4,
     answer: null,
-    onAnswer: testNoop,
+    onSubmit: testNoop,
   });
   check(
-    'test (reader): карточка — две стороны и «Знаю / Не знаю»',
+    'test (reader): карточка — две стороны, «Знаю / Не знаю» без «Готово»',
     cardHtml.includes('test-flashcard__face--back') &&
       cardHtml.includes('Средства индивидуальной защиты') &&
       cardHtml.includes('Не знаю') &&
-      cardHtml.includes('Знаю'),
+      cardHtml.includes('Знаю') &&
+      !cardHtml.includes('test-question__submit'),
   );
 
   // Режим ветвления: верных и неверных ответов нет, оценки тоже.
@@ -2362,7 +2415,7 @@ try {
     answer: { selected: ['o-2'], verdict: 'answered' },
     optionOrder: ['o-2', 'o-1'],
     graded: false,
-    onAnswer: testNoop,
+    onSubmit: testNoop,
     onDraft: testNoop,
   });
   check(
@@ -2372,6 +2425,7 @@ try {
       !branchSingleHtml.includes('test-option is-wrong') &&
       !branchSingleHtml.includes('test-question__verdict') &&
       !branchSingleHtml.includes('test-feedback') &&
+      !branchSingleHtml.includes('test-question__submit') &&
       !branchSingleHtml.includes('Верно'),
   );
 
@@ -2382,13 +2436,13 @@ try {
     answer: null,
     draft: { selected: ['o-3'] },
     graded: false,
-    onAnswer: testNoop,
+    onSubmit: testNoop,
     onDraft: testNoop,
   });
   check(
-    'test (reader): при ветвлении несколько ответов отправляются вручную',
-    branchMultipleHtml.includes('test-options__submit') &&
-      branchMultipleHtml.includes('Отметьте подходящие варианты') &&
+    'test (reader): при ветвлении ответ отправляется кнопкой «Готово»',
+    branchMultipleHtml.includes('test-question__submit') &&
+      branchMultipleHtml.includes('Кнопка «Готово» зафиксирует выбор') &&
       !branchMultipleHtml.includes('засчитает ошибку'),
   );
 
@@ -2398,7 +2452,7 @@ try {
     total: 2,
     answer: { selected: ['o-3'], verdict: 'answered' },
     graded: false,
-    onAnswer: testNoop,
+    onSubmit: testNoop,
     onDraft: testNoop,
   });
   check(
@@ -2415,7 +2469,7 @@ try {
     total: 4,
     answer: { know: true, verdict: 'answered' },
     graded: false,
-    onAnswer: testNoop,
+    onSubmit: testNoop,
   });
   check(
     'test (reader): при ветвлении карточка не выносит вердикт',
@@ -2551,6 +2605,20 @@ try {
       testRunUtils.isResolved({ verdict: 'answered' }) &&
       testRunUtils.runProgress({ sequence: ['q-1', 'q-2'], answers: { 'q-1': { verdict: 'answered' } } }).percent === 50 &&
       testRunUtils.matchProgress(sampleQuestions[2], { 'p-1': 'p-2' }).matched === 1,
+  );
+  check(
+    'test (utils): «Готово» активно после выбора и проверяет ответ',
+    !testRunUtils.canSubmit(sampleQuestions[0], { selected: [] }) &&
+      testRunUtils.canSubmit(sampleQuestions[0], { selected: ['o-2'] }) &&
+      !testRunUtils.canSubmit(sampleQuestions[2], { matches: { 'p-1': 'p-1' } }) &&
+      testRunUtils.canSubmit(sampleQuestions[2], { matches: { 'p-1': 'p-1', 'p-2': 'p-2' } }) &&
+      testRunUtils.canSubmit(sampleQuestions[3], { know: true }) &&
+      testRunUtils.gradeAnswer(sampleQuestions[0], { selected: ['o-1'] }).verdict === 'correct' &&
+      testRunUtils.gradeAnswer(sampleQuestions[0], { selected: ['o-2'] }).verdict === 'wrong' &&
+      testRunUtils.gradeAnswer(sampleQuestions[0], { selected: ['o-2'] }, false).verdict === 'answered' &&
+      testRunUtils.gradeAnswer(sampleQuestions[1], { selected: ['o-3'] }).verdict === 'wrong' &&
+      testRunUtils.gradeAnswer(sampleQuestions[1], { selected: ['o-3', 'o-4'] }).verdict === 'correct' &&
+      testRunUtils.gradeAnswer(sampleQuestions[3], { know: true }).verdict === 'correct',
   );
   check(
     'test (utils): ветвление ведёт в раздел, без ветвления — дальше',

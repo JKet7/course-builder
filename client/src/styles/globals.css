@@ -7748,22 +7748,32 @@ iframe {
   color: var(--color-danger);
 }
 
-.test-options__submit {
+/* Подвал карточки вопроса: «Готово» в правом нижнем углу.
+   До отправки выбор остаётся черновиком, поэтому рядом стоит подсказка. */
+
+.test-question__submit {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
-  margin-top: 12px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border);
 }
 
-.test-options__hint {
-  max-width: 420px;
+.test-question__submit-hint {
+  flex: 1 1 220px;
   font-size: 12px;
   line-height: 1.4;
   color: var(--color-text-muted);
 }
 
-/* Мгновенная проверка */
+.test-question__submit .btn {
+  margin-left: auto;
+}
+
+/* Проверка по кнопке «Готово» */
 
 .test-feedback {
   margin-top: 14px;
@@ -7890,31 +7900,10 @@ iframe {
   border-color: color-mix(in srgb, var(--test-success) 45%, transparent);
 }
 
-.test-match__tile.is-wrong {
-  border-color: var(--color-danger);
-  background: color-mix(in srgb, var(--color-danger) 10%, var(--color-surface));
-  animation: test-match-shake 0.4s ease;
-}
-
 .test-match__hint {
   margin: 8px 0 0;
   font-size: 12px;
   color: var(--color-text-muted);
-}
-
-@keyframes test-match-shake {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-
-  25% {
-    transform: translateX(-4px);
-  }
-
-  75% {
-    transform: translateX(4px);
-  }
 }
 
 /* Карточка «Знаю / Не знаю» */
@@ -8472,6 +8461,16 @@ iframe {
   .test-run__footer-hint {
     order: 3;
     flex-basis: 100%;
+  }
+
+  .test-question__submit {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .test-question__submit .btn {
+    width: 100%;
+    margin-left: 0;
   }
 
   .test-results__hero {

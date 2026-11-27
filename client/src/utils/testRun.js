@@ -125,14 +125,25 @@ export function isResolved(answer) {
 }
 
 /**
- * Мгновенная проверка выбранных вариантов («Несколько ответов»).
- * null — выбор ещё неполный: ни одного лишнего, но и не все верные отмечены.
+ * Ответ готов к отправке кнопкой «Готово»: отмечен хотя бы один вариант,
+ * соединены все пары или нажата сторона карточки. Пока это не так, кнопка
+ * «Готово» неактивна.
  */
-export function selectionVerdict(question, selected = []) {
-  const correct = new Set(correctOptionIds(question));
-  if (correct.size === 0 || selected.length === 0) return null;
-  if (selected.some((id) => !correct.has(id))) return 'wrong';
-  return selected.length === correct.size ? 'correct' : null;
+export function canSubmit(question, value = {}) {
+  if (!question) return false;
+  if (question.type === 'match') return matchProgress(question, value.matches).complete;
+  if (question.type === 'card') return value.know === true || value.know === false;
+  return (value.selected ?? []).length > 0;
+}
+
+/**
+ * Проверка ответа по кнопке «Готово» — единственное место, где появляется
+ * вердикт. До нажатия выбор остаётся черновиком попытки (`run.picks`): его
+ * можно менять сколько угодно, и подсветки «верно / неверно» не показывается.
+ */
+export function gradeAnswer(question, value = {}, graded = true) {
+  if (!graded) return { ...value, verdict: ANSWERED_VERDICT };
+  return { ...value, verdict: isAnswerCorrect(question, value) ? 'correct' : 'wrong' };
 }
 
 /** Счётчик сопоставления: сколько пар соединено и все ли. */
