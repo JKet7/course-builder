@@ -1,9 +1,7 @@
 import 'dotenv/config';
 import bcrypt from 'bcrypt';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../src/config/prisma.js';
 import { PRESET_THEMES } from '../src/utils/theme.js';
-
-const prisma = new PrismaClient();
 
 const ADMIN_LOGIN = 'admin';
 const ADMIN_PASSWORD = 'admin123';
