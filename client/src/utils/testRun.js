@@ -4,7 +4,9 @@
  *
  * Состояние попытки хранится в localStorage (`course-builder:test:<blockId>`):
  * прогресс, таймер и отметки «Вернуться позже» (`run.flags`) переживают
- * перезагрузку страницы, как чек-листы теории.
+ * перезагрузку страницы, как чек-листы теории. Путь ветвления (`run.path`)
+ * хранит вопросы в порядке прохождения: навигации в этом режиме нет, поэтому
+ * «Назад» ведёт только по пройденному пути.
  */
 
 export const TEST_RUN_VERSION = 1;
@@ -173,6 +175,22 @@ export function gradeAnswer(question, value = {}, graded = true) {
   return { ...value, verdict: isAnswerCorrect(question, value) ? 'correct' : 'wrong' };
 }
 
+/**
+ * Значение ответа вопроса в одном виде: выбранные варианты, собранные пары или
+ * сторона карточки. Читатель и «Дальше» считают готовность ответа по нему.
+ */
+export function answerValue(question, answer, draft) {
+  if (!question) return {};
+  if (question.type === 'match') return { matches: answer?.matches ?? draft?.matches ?? {} };
+
+  if (question.type === 'card') {
+    const know = answer?.know ?? draft?.know;
+    return know === undefined || know === null ? {} : { know };
+  }
+
+  return { selected: answer?.selected ?? draft?.selected ?? [] };
+}
+
 /** Счётчик сопоставления: сколько пар соединено и все ли. */
 export function matchProgress(question, matches = {}) {
   const pairs = question?.pairs ?? [];
@@ -213,40 +231,131 @@ export function resolveTarget(question, answer, settings) {
 }
 
 /**
- * Следующий вопрос после ответа: обычный порядок, первый вопрос раздела или
- * null — тест закончен («Отправить форму» либо вопросы кончились).
+ * Путь читателя в режиме ветвления: вопросы в том порядке, в котором он их
+ * прошёл. Попытки, сохранённые до появления пути, его не знают — тогда путь
+ * начинается с первого вопроса последовательности.
  */
-export function nextQuestionId({ sequence, currentId, questions, answer, settings }) {
-  const index = sequence.indexOf(currentId);
-  if (index === -1) return null;
+export function branchPath(run) {
+  const path = Array.isArray(run?.path) ? run.path.filter(Boolean) : [];
+  if (path.length > 0) return path;
 
-  const question = questions.find((item) => item.id === currentId);
-  if (!question) return null;
+  const first = Array.isArray(run?.sequence) ? run.sequence[0] : null;
+  return first ? [first] : [];
+}
 
-  const target = resolveTarget(question, answer, settings);
+/**
+ * Следующий вопрос ветки после ответа: раздел из варианта, иначе — следующий
+ * по общему порядку. null — путь закончен («Отправить форму» или вопросы
+ * кончились). Вопрос, который на пути уже был, пропускаем: иначе читатель
+ * зациклится на одном месте ветки.
+ */
+export function branchNextId({ run, question, questions, settings }) {
+  if (!run || !question) return null;
+
+  const sequence = Array.isArray(run.sequence) ? run.sequence : [];
+  const visited = new Set(branchPath(run));
+  const byId = new Map(questions.map((item) => [item.id, item]));
+  const target = resolveTarget(question, run.answers?.[question.id], settings);
 
   if (target.type === 'submit') return null;
 
   if (target.type === 'section') {
-    const byId = new Map(questions.map((item) => [item.id, item]));
-    return sequence.find((id) => byId.get(id)?.sectionId === target.sectionId) ?? null;
+    const sectionId = sequence.find((id) => byId.get(id)?.sectionId === target.sectionId);
+    if (sectionId && !visited.has(sectionId)) return sectionId;
   }
 
-  return sequence[index + 1] ?? null;
+  const index = sequence.indexOf(question.id);
+  const rest = index >= 0 ? sequence.slice(index + 1) : sequence;
+  return rest.find((id) => !visited.has(id)) ?? null;
+}
+
+/** Совпадает ли новый выбор с уже записанным ответом (смена ответа в ветвлении). */
+function sameAnswerValue(question, stored, value = {}) {
+  if (!stored) return false;
+
+  if (question.type === 'card') return (stored.know ?? null) === (value.know ?? null);
+
+  if (question.type === 'match') {
+    const next = value.matches ?? {};
+    const kept = stored.matches ?? {};
+    const keys = Object.keys(next);
+    return keys.length === Object.keys(kept).length && keys.every((key) => kept[key] === next[key]);
+  }
+
+  const next = value.selected ?? [];
+  const kept = stored.selected ?? [];
+  return next.length === kept.length && next.every((id) => kept.includes(id));
+}
+
+/**
+ * Перестройка ветки: читатель вернулся к вопросу и выбирает другой ответ.
+ * Ответ на этот вопрос и на все следующие по пути сбрасывается, путь
+ * обрезается, а новый выбор становится черновиком — его зафиксирует «Дальше».
+ */
+export function resetBranch(run, questionId, value = {}) {
+  if (!run || !questionId) return run;
+
+  const path = branchPath(run);
+  const index = path.indexOf(questionId);
+  if (index === -1) return run;
+
+  const dropped = new Set(path.slice(index));
+  const keep = (source) =>
+    Object.fromEntries(Object.entries(source ?? {}).filter(([id]) => !dropped.has(id)));
+
+  return {
+    ...run,
+    path: path.slice(0, index + 1),
+    currentId: questionId,
+    answers: keep(run.answers),
+    picks: { ...keep(run.picks), [questionId]: { ...value } },
+  };
+}
+
+/**
+ * Ветвление: ответ записывается без оценки. Если на вопрос уже отвечали, вызов
+ * означает смену ответа — путь пересобирается (resetBranch), иначе ответ
+ * фиксируется, а черновик вопроса удаляется.
+ */
+export function branchAnswer(run, question, value = {}) {
+  if (!run || !question) return run;
+
+  const stored = run.answers?.[question.id];
+
+  if (stored && sameAnswerValue(question, stored, value)) return run;
+  if (stored) return resetBranch(run, question.id, value);
+
+  const picks = { ...run.picks };
+  delete picks[question.id];
+
+  return {
+    ...run,
+    answers: {
+      ...run.answers,
+      [question.id]: { ...gradeAnswer(question, value, false), at: Date.now() },
+    },
+    picks,
+  };
+}
+
+/**
+ * Раздел, в котором закончился путь читателя, — итог ветки. Пустой, если
+ * последний отвеченный вопрос не входит ни в один раздел.
+ */
+export function finalSection({ sequence, questions, answers, sections = [] }) {
+  const byId = new Map(questions.map((question) => [question.id, question]));
+  const lastAnswered = [...sequence].reverse().find((id) => isResolved(answers?.[id]));
+  const sectionId = lastAnswered ? byId.get(lastAnswered)?.sectionId : null;
+
+  return sections.find((item) => item.id === sectionId) ?? null;
 }
 
 /** Итоговый комментарий: итог раздела, на котором закончился путь, иначе итог теста. */
 export function finalResult({ sequence, questions, answers, sections = [], settings }) {
   if (!settings?.branching) return settings?.result ?? null;
 
-  const byId = new Map(questions.map((question) => [question.id, question]));
-  const lastAnswered = [...sequence].reverse().find((id) => isResolved(answers?.[id]));
-
-  if (lastAnswered) {
-    const sectionId = byId.get(lastAnswered)?.sectionId;
-    const section = sections.find((item) => item.id === sectionId);
-    if (section?.result) return section.result;
-  }
+  const section = finalSection({ sequence, questions, answers, sections });
+  if (section?.result) return section.result;
 
   return settings?.result ?? null;
 }
@@ -294,14 +403,16 @@ export function correctLabel(question) {
 
 /**
  * Итоги попытки: процент (когда тест с оценкой), время, статистика по группам
- * и детализация. В режиме ветвления оценки нет — считаются только отвеченные
- * вопросы, а правильные ответы не показываются.
+ * и детализация. В режиме ветвления оценки нет — считаются только вопросы
+ * пройденного пути, а правильные ответы не показываются.
  * Процент считается по отвеченным вопросам: при ветвлении путь у всех разный.
  */
 export function computeResults({ questions, run, sections = [], settings }) {
   const graded = isGraded(settings);
   const byId = new Map(questions.map((question) => [question.id, question]));
   const sequence = (run?.sequence ?? []).filter((id) => byId.has(id));
+  // Ветвление: в итоги попадает только пройденный путь, а не весь банк вопросов.
+  const order = settings?.branching ? branchPath(run).filter((id) => byId.has(id)) : sequence;
   const answers = run?.answers ?? {};
 
   let correct = 0;
@@ -310,7 +421,7 @@ export function computeResults({ questions, run, sections = [], settings }) {
   const groups = new Map();
   const details = [];
 
-  for (const id of sequence) {
+  for (const id of order) {
     const question = byId.get(id);
     const answer = answers[id];
     const groupKey = question.groupId ?? 'none';
@@ -353,9 +464,14 @@ export function computeResults({ questions, run, sections = [], settings }) {
     percent: graded && group.answered > 0 ? Math.round((group.correct / group.answered) * 100) : null,
   }));
 
+  // Итог ветки — раздел, в котором закончился путь: его заголовок и описание.
+  const resultSection = settings?.branching
+    ? finalSection({ sequence: order, questions, answers, sections })
+    : null;
+
   return {
     graded,
-    total: sequence.length,
+    total: order.length,
     answered,
     correct: graded ? correct : null,
     wrong: graded ? answered - correct : null,
@@ -363,7 +479,8 @@ export function computeResults({ questions, run, sections = [], settings }) {
     elapsed: elapsedSeconds(run),
     groups: list,
     details,
-    result: finalResult({ sequence, questions, answers, sections, settings }),
+    result: finalResult({ sequence: order, questions, answers, sections, settings }),
+    resultTitle: resultSection?.result ? resultSection.title || null : null,
   };
 }
 
@@ -379,7 +496,8 @@ export function elapsedSeconds(run, now = Date.now()) {
  * Вопросы могли добавить или удалить, варианты — отредактировать. Порядок
  * существующих вопросов и перемешанных вариантов сохраняем, новые дописываем
  * в конец, удалённые вычищаем вместе с ответами. Черновики, метки «Вернуться
- * позже» и ответы на исчезнувшие вопросы читателю уже не нужны.
+ * позже» и ответы на исчезнувшие вопросы читателю уже не нужны. Путь ветвления
+ * чистится так же: удалённые вопросы из него выпадают.
  */
 export function reconcileRun(run, questions, settings = DEFAULT_SETTINGS) {
   if (!run) return run;
@@ -392,6 +510,12 @@ export function reconcileRun(run, questions, settings = DEFAULT_SETTINGS) {
   for (const id of ids) if (!sequence.includes(id)) sequence.push(id);
 
   const currentId = sequence.includes(run.currentId) ? run.currentId : sequence[0] ?? null;
+
+  // Путь ветвления: удалённые вопросы вычищаем. Если текущего вопроса на пути
+  // нет (вопрос удалили или попытка сохранена до появления пути) — дописываем.
+  const path = Array.isArray(run.path) ? run.path.filter((id) => known.has(id)) : [];
+  if (path.length > 0 && currentId && !path.includes(currentId)) path.push(currentId);
+  if (path.length === 0 && settings.branching && currentId) path.push(currentId);
 
   const keepKnown = (source) =>
     Object.fromEntries(Object.entries(source ?? {}).filter(([id]) => known.has(id)));
@@ -428,7 +552,7 @@ export function reconcileRun(run, questions, settings = DEFAULT_SETTINGS) {
   const picks = keepKnown(run.picks);
   const flags = keepKnown(run.flags);
 
-  return { ...run, sequence, currentId, optionOrder, pairOrder, answers, picks, flags };
+  return { ...run, sequence, currentId, path, optionOrder, pairOrder, answers, picks, flags };
 }
 
 /** Новая попытка: порядок вопросов и вариантов фиксируется сразу. */
@@ -457,6 +581,8 @@ export function createRun(blockId, questions, settings = DEFAULT_SETTINGS, rando
     sequence,
     optionOrder,
     pairOrder,
+    // Путь ветвления: читатель начинает с первого вопроса последовательности.
+    path: sequence.length > 0 ? [sequence[0]] : [],
     currentId: sequence[0] ?? null,
     answers: {},
     picks: {},

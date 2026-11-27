@@ -2202,6 +2202,10 @@ try {
   );
 
   seed(useUiStore, { uiMode: 'view' });
+  // Читатель с оценкой: сетка навигации, прогресс и кнопка «Готово».
+  seed(useTestStore, {
+    settings: { shuffleQuestions: true, shuffleOptions: false, branching: false, result: null },
+  });
   const testView = render(TestBlock, '/block/block-test', { block: testBlockData });
   check(
     'test (view): один вопрос, шапка с таймером и прогрессом',
@@ -2255,6 +2259,36 @@ try {
       !testView.includes('question-card') &&
       !testView.includes('question-settings') &&
       !testView.includes('Добавить раздел'),
+  );
+
+  // Ветвление: пользователь не может перепрыгнуть вопрос — панели навигации нет,
+  // в шапке только номер вопроса, а ответ фиксирует «Дальше».
+  seed(useTestStore, {
+    settings: { shuffleQuestions: false, shuffleOptions: false, branching: true, result: null },
+  });
+  const branchView = render(TestBlock, '/block/block-test', { block: testBlockData });
+  check(
+    'test (view): при ветвлении панели навигации нет',
+    !branchView.includes('test-nav') &&
+      !branchView.includes('test-run__side') &&
+      !branchView.includes('Навигация по вопросам') &&
+      !branchView.includes('Завершить тест') &&
+      branchView.includes('test-run__layout--single'),
+  );
+  check(
+    'test (view): при ветвлении только номер вопроса без полосы прогресса',
+    branchView.includes('test-run__step') &&
+      branchView.includes('Вопрос 1') &&
+      !branchView.includes('Вопрос 1 из') &&
+      !branchView.includes('role="progressbar"') &&
+      !branchView.includes('test-question__submit'),
+  );
+  check(
+    'test (view): при ветвлении «Дальше» ждёт ответа, флажка нет',
+    /disabled=""[^>]*>\s*Дальше/.test(branchView) &&
+      branchView.includes('Выберите вариант и нажмите «Дальше»') &&
+      !branchView.includes('data-flag-toggle') &&
+      !branchView.includes('>Готово<'),
   );
 
   // Режим читателя: типы вопросов, экран итогов и сверка сохранённой попытки.
@@ -2495,20 +2529,21 @@ try {
     onDraft: testNoop,
   });
   check(
-    'test (reader): при ветвлении нет вердикта и подсветки верного',
+    'test (reader): при ветвлении нет вердикта, подсветки верного и блокировки',
     branchSingleHtml.includes('test-option is-picked') &&
       !branchSingleHtml.includes('test-option is-correct') &&
       !branchSingleHtml.includes('test-option is-wrong') &&
       !branchSingleHtml.includes('test-question__verdict') &&
       !branchSingleHtml.includes('test-feedback') &&
       !branchSingleHtml.includes('test-question__submit') &&
+      !branchSingleHtml.includes('disabled=""') &&
       !branchSingleHtml.includes('Верно'),
   );
 
   const branchMultipleHtml = render(ReaderQuestion, '/block/block-test', {
     question: sampleQuestions[1],
     index: 1,
-    total: 2,
+    total: null,
     answer: null,
     draft: { selected: ['o-3'] },
     graded: false,
@@ -2516,10 +2551,13 @@ try {
     onDraft: testNoop,
   });
   check(
-    'test (reader): при ветвлении ответ отправляется кнопкой «Готово»',
-    branchMultipleHtml.includes('test-question__submit') &&
-      branchMultipleHtml.includes('Кнопка «Готово» зафиксирует выбор') &&
-      !branchMultipleHtml.includes('засчитает ошибку'),
+    'test (reader): при ветвлении «Готово» нет, ответ фиксирует «Дальше»',
+    !branchMultipleHtml.includes('test-question__submit') &&
+      !branchMultipleHtml.includes('Готово') &&
+      branchMultipleHtml.includes('test-option is-picked') &&
+      !branchMultipleHtml.includes('disabled=""') &&
+      branchMultipleHtml.includes('Вопрос 2') &&
+      !branchMultipleHtml.includes('из 2'),
   );
 
   const branchFeedbackHtml = render(ReaderQuestion, '/block/block-test', {
@@ -2548,10 +2586,11 @@ try {
     onSubmit: testNoop,
   });
   check(
-    'test (reader): при ветвлении карточка не выносит вердикт',
+    'test (reader): при ветвлении карточка не выносит вердикт и меняется',
     branchCardHtml.includes('test-flashcard is-flipped') &&
       branchCardHtml.includes('is-yes is-active') &&
-      !branchCardHtml.includes('test-flashcard__verdict'),
+      !branchCardHtml.includes('test-flashcard__verdict') &&
+      !branchCardHtml.includes('disabled=""'),
   );
 
   const resultsRun = {
@@ -2606,6 +2645,7 @@ try {
     questions: sampleQuestions,
     run: {
       ...resultsRun,
+      path: ['q-1', 'q-2', 'q-3'],
       answers: {
         'q-1': { selected: ['o-2'], verdict: 'answered' },
         'q-2': { selected: ['o-3'], verdict: 'answered' },
@@ -2622,24 +2662,27 @@ try {
     onRestart: testNoop,
   });
   check(
-    'test (results): при ветвлении оценки нет, но ответы видны',
+    'test (results): при ветвлении считаются только вопросы пути',
     branchResults.graded === false &&
       branchResults.percent === null &&
       branchResults.correct === null &&
       branchResults.wrong === null &&
+      branchResults.total === 3 &&
       branchResults.answered === 3 &&
+      branchResults.details.length === 3 &&
       branchResults.details[0].verdict === 'answered' &&
       branchResults.details[0].correct === null &&
       branchResults.groups[0].percent === null,
   );
   check(
-    'test (results): при ветвлении нет процента и правильных ответов',
+    'test (results): при ветвлении нет процента, правильных ответов и групп',
     branchResultsHtml.includes('test-results__score is-neutral') &&
-      branchResultsHtml.includes('3/4') &&
+      branchResultsHtml.includes('3/3') &&
       branchResultsHtml.includes('Оценка не выставляется') &&
-      branchResultsHtml.includes('Отвечено 3 из 4') &&
+      branchResultsHtml.includes('Отвечено 3 из 3') &&
       !branchResultsHtml.includes('Правильный ответ') &&
       !branchResultsHtml.includes('test-results__bar') &&
+      !branchResultsHtml.includes('По группам') &&
       !branchResultsHtml.includes('%'),
   );
   check(
@@ -2647,11 +2690,45 @@ try {
     branchResultsHtml.includes('test-results__comment') && branchResultsHtml.includes('Итог пути'),
   );
 
+  // Итог пути: раздел с описанием становится заголовком экрана результатов и
+  // показывается до разбора ответов.
+  const branchSections = [
+    { id: 's-1', title: 'Комплект «Стандарт»', result: docWith('Вам подходит базовый комплект.'), order: 0 },
+  ];
+  const branchSectionResults = testRunUtils.computeResults({
+    questions: sampleQuestions,
+    run: {
+      ...resultsRun,
+      path: ['q-1'],
+      answers: {
+        'q-1': { selected: ['o-2'], verdict: 'answered' },
+      },
+    },
+    sections: branchSections,
+    settings: { shuffleQuestions: false, shuffleOptions: false, branching: true, result: docWith('Общий итог') },
+  });
+  const branchSectionHtml = render(ReaderResults, '/block/block-test', {
+    block: testBlockData,
+    results: branchSectionResults,
+    nextBlock: null,
+    onRestart: testNoop,
+  });
+  check(
+    'test (results): итог ветки — заголовок раздела и его описание',
+    branchSectionResults.resultTitle === 'Комплект «Стандарт»' &&
+      branchSectionHtml.includes('Ваш результат') &&
+      branchSectionHtml.includes('Комплект «Стандарт»') &&
+      branchSectionHtml.includes('Вам подходит базовый комплект.') &&
+      branchSectionHtml.indexOf('Вам подходит базовый комплект.') < branchSectionHtml.indexOf('Разбор ответов') &&
+      !branchSectionHtml.includes('Общий итог'),
+  );
+
   const reconciled = testRunUtils.reconcileRun(
     {
       blockId: 'block-test',
       sequence: ['q-gone', 'q-2'],
       currentId: 'q-gone',
+      path: ['q-gone', 'q-2'],
       answers: { 'q-gone': { verdict: 'correct' }, 'q-2': { verdict: 'wrong' } },
       picks: { 'q-gone': { selected: [] } },
       flags: { 'q-gone': true, 'q-2': true },
@@ -2665,6 +2742,7 @@ try {
     'test (utils): сверка попытки убирает удалённый вопрос и дополняет порядок',
     reconciled.sequence.join(',') === 'q-2,q-1,q-3,q-4' &&
       reconciled.currentId === 'q-2' &&
+      reconciled.path.join(',') === 'q-2' &&
       reconciled.answers['q-gone'] === undefined &&
       reconciled.picks['q-gone'] === undefined &&
       reconciled.flags['q-gone'] === undefined &&
@@ -2710,22 +2788,79 @@ try {
       testRunUtils.gradeAnswer(sampleQuestions[1], { selected: ['o-3', 'o-4'] }).verdict === 'correct' &&
       testRunUtils.gradeAnswer(sampleQuestions[3], { know: true }).verdict === 'correct',
   );
+  // Путь ветвления: цель варианта, защита от циклов, «Отправить форму» и
+  // перестройка пути при смене ответа.
+  const branchQuestions = [
+    {
+      ...sampleQuestions[0],
+      options: [
+        { id: 'o-1', text: 'Дальше по порядку', isCorrect: false, targetType: 'next', targetSectionId: null },
+        { id: 'o-2', text: 'В раздел Б', isCorrect: false, targetType: 'section', targetSectionId: 's-2' },
+        { id: 'o-3', text: 'К итогу', isCorrect: false, targetType: 'submit', targetSectionId: null },
+      ],
+    },
+    { ...sampleQuestions[1], id: 'q-2', sectionId: 's-1', options: [] },
+    { ...sampleQuestions[2], id: 'q-3', sectionId: 's-2', pairs: [] },
+  ];
+  const branchRunBase = {
+    sequence: ['q-1', 'q-2', 'q-3'],
+    path: ['q-1'],
+    answers: { 'q-1': { selected: ['o-2'], verdict: 'answered' } },
+    picks: {},
+    flags: {},
+  };
+
   check(
-    'test (utils): ветвление ведёт в раздел, без ветвления — дальше',
-    testRunUtils.nextQuestionId({
-      sequence: ['q-1', 'q-2'],
-      currentId: 'q-1',
-      questions: sampleQuestions,
-      answer: { selected: ['o-2'] },
+    'test (utils): ветвление ведёт в раздел, повтор пути пропускает, «Отправить форму» — итог',
+    testRunUtils.branchNextId({
+      run: branchRunBase,
+      question: branchQuestions[0],
+      questions: branchQuestions,
       settings: { branching: true },
-    }) === 'q-1' &&
-      testRunUtils.nextQuestionId({
-        sequence: ['q-1', 'q-2'],
-        currentId: 'q-1',
-        questions: sampleQuestions,
-        answer: { selected: ['o-2'] },
+    }) === 'q-3' &&
+      testRunUtils.branchNextId({
+        run: { ...branchRunBase, path: ['q-1', 'q-3'] },
+        question: branchQuestions[0],
+        questions: branchQuestions,
+        settings: { branching: true },
+      }) === 'q-2' &&
+      testRunUtils.branchNextId({
+        run: { ...branchRunBase, answers: { 'q-1': { selected: ['o-3'] } } },
+        question: branchQuestions[0],
+        questions: branchQuestions,
+        settings: { branching: true },
+      }) === null &&
+      testRunUtils.branchNextId({
+        run: branchRunBase,
+        question: branchQuestions[0],
+        questions: branchQuestions,
         settings: { branching: false },
       }) === 'q-2',
+  );
+
+  const freshBranchAnswer = testRunUtils.branchAnswer(
+    { ...branchRunBase, path: ['q-1'], answers: {} },
+    branchQuestions[0],
+    { selected: ['o-1'] },
+  );
+  const changedBranchAnswer = testRunUtils.branchAnswer(branchRunBase, branchQuestions[0], { selected: ['o-1'] });
+  const sameBranchAnswer = testRunUtils.branchAnswer(branchRunBase, branchQuestions[0], { selected: ['o-2'] });
+
+  check(
+    'test (utils): ответ ветки фиксируется без оценки, смена ответа обрезает путь',
+    freshBranchAnswer.answers['q-1'].verdict === 'answered' &&
+      freshBranchAnswer.picks['q-1'] === undefined &&
+      changedBranchAnswer.path.join(',') === 'q-1' &&
+      changedBranchAnswer.currentId === 'q-1' &&
+      changedBranchAnswer.answers['q-1'] === undefined &&
+      changedBranchAnswer.picks['q-1'].selected.join(',') === 'o-1' &&
+      sameBranchAnswer === branchRunBase,
+  );
+  check(
+    'test (utils): путь ветвления начинается с первого вопроса попытки',
+    testRunUtils.branchPath({ sequence: ['q-2', 'q-1'] }).join(',') === 'q-2' &&
+      testRunUtils.branchPath({ sequence: [], path: [] }).length === 0 &&
+      testRunUtils.createRun('block-test', sampleQuestions, { branching: true }).path.join(',') === 'q-1',
   );
 
   // Стили флажка и треугольника в сетке навигации.
@@ -2738,6 +2873,15 @@ try {
       globalsCss.includes('.test-nav__flag {') &&
       globalsCss.includes('border-top: 10px solid var(--color-danger)') &&
       globalsCss.includes('.test-run__flags {'),
+  );
+
+  // Стили ветвления: одна колонка без навигации, номер вопроса и предупреждение.
+  check(
+    'test (css): ветвление — одна колонка, «Вопрос N» и предупреждение',
+    globalsCss.includes('.test-run__layout--single {') &&
+      globalsCss.includes('.test-run__step {') &&
+      globalsCss.includes('.test-run__step-hint {') &&
+      globalsCss.includes('.test-run__notice {'),
   );
 
   // Логика режима редактора: раскладка разделов, перетаскивание и переходы.

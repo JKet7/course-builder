@@ -7476,6 +7476,46 @@ iframe {
   align-items: start;
 }
 
+/* Ветвление: навигации нет, вопрос занимает всю ширину. */
+.test-run__layout--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Ветвление: вместо полосы прогресса — номер текущего вопроса без общего
+   количества: длина пути зависит от ответов и заранее неизвестна. */
+.test-run__step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.test-run__step strong {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.test-run__step-hint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+/* Предупреждение ветвления: смена ответа пересобирает путь. */
+.test-run__notice {
+  margin: 0;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--test-warning);
+  background: color-mix(in srgb, var(--test-warning) 10%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--test-warning) 35%, transparent);
+  border-radius: 12px;
+}
+
 .test-run__main {
   display: flex;
   flex-direction: column;

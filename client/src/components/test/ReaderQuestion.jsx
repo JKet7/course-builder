@@ -4,6 +4,7 @@ import Icon from '../ui/Icon.jsx';
 import { TiptapContent } from '../content/ContentRenderer.jsx';
 import { getQuestionTypeLabel } from '../../utils/helpers.js';
 import {
+  answerValue,
   canSubmit,
   correctLabel,
   isResolved,
@@ -68,14 +69,18 @@ function ChoiceQuestion({ question, answer, draft, optionOrder, graded, onDraft,
   const optionById = new Map(options.map((option) => [option.id, option]));
   const ids = orderedIds(options, optionOrder);
   const resolved = isResolved(answer);
+  const locked = resolved && graded;
   const selected = answer?.selected ?? draft?.selected ?? [];
 
   const choose = (option) => {
-    if (resolved) return;
+    if (locked) return;
 
-    // Повторный клик по выбранному варианту снимает выбор.
+    // Повторный клик по выбранному варианту снимает выбор. В ветвлении
+    // записанный ответ так не снять — его можно только заменить другим.
     if (question.type === 'single') {
-      onDraft({ selected: selected.includes(option.id) ? [] : [option.id] });
+      const picked = selected.includes(option.id);
+      if (picked && resolved) return;
+      onDraft({ selected: picked ? [] : [option.id] });
       return;
     }
 
@@ -105,7 +110,7 @@ function ChoiceQuestion({ question, answer, draft, optionOrder, graded, onDraft,
                 type="button"
                 className={classes.filter(Boolean).join(' ')}
                 aria-pressed={picked}
-                disabled={resolved}
+                disabled={locked}
                 onClick={() => choose(option)}
               >
                 <span
@@ -139,13 +144,14 @@ function MatchQuestion({ question, answer, draft, pairOrder, graded, onDraft, on
   const rightIds = orderedIds(pairs, pairOrder);
   const matches = answer?.matches ?? draft?.matches ?? {};
   const resolved = isResolved(answer);
+  const locked = resolved && graded;
   const progress = matchProgress(question, matches);
   const usedRight = new Set(Object.values(matches));
 
   const [activeLeft, setActiveLeft] = useState(null);
 
   const pickLeft = (pair) => {
-    if (resolved) return;
+    if (locked) return;
 
     // Уже соединённое понятие освобождаем: читатель хочет выбрать другое значение.
     if (matches[pair.id] !== undefined) {
@@ -160,7 +166,7 @@ function MatchQuestion({ question, answer, draft, pairOrder, graded, onDraft, on
   };
 
   const pickRight = (rightId) => {
-    if (resolved || !activeLeft) return;
+    if (locked || !activeLeft) return;
 
     const next = { ...matches, [activeLeft]: rightId };
     setActiveLeft(null);
@@ -187,7 +193,7 @@ function MatchQuestion({ question, answer, draft, pairOrder, graded, onDraft, on
                 key={pair.id}
                 className={classes}
                 data-pair-id={pair.id}
-                disabled={resolved}
+                disabled={locked}
                 aria-pressed={activeLeft === pair.id}
                 onClick={() => pickLeft(pair)}
               >
@@ -209,7 +215,7 @@ function MatchQuestion({ question, answer, draft, pairOrder, graded, onDraft, on
                 key={id}
                 className={classes}
                 data-pair-id={id}
-                disabled={resolved || matched}
+                disabled={locked || matched}
                 onClick={() => pickRight(id)}
               >
                 {pair.right}
@@ -219,7 +225,7 @@ function MatchQuestion({ question, answer, draft, pairOrder, graded, onDraft, on
         </div>
       </div>
 
-      {!resolved && (
+      {!locked && (
         <p className="test-match__hint">
           Нажмите понятие слева, затем его значение справа. Чтобы поменять пару, нажмите на понятие ещё раз.
         </p>
@@ -237,6 +243,7 @@ function MatchQuestion({ question, answer, draft, pairOrder, graded, onDraft, on
 function CardQuestion({ question, answer, graded, onSubmit }) {
   const data = question.data ?? {};
   const resolved = isResolved(answer);
+  const locked = resolved && graded;
   const know = answer?.know ?? (answer?.verdict === 'correct' ? true : answer?.verdict === 'wrong' ? false : null);
 
   return (
@@ -263,7 +270,7 @@ function CardQuestion({ question, answer, graded, onSubmit }) {
           className={`test-flashcard__action is-no${resolved && know === false ? ' is-active' : ''}`}
           aria-label="Не знаю"
           title="Не знаю"
-          disabled={resolved}
+          disabled={locked}
           onClick={() => onSubmit({ know: false })}
         >
           <span className="test-flashcard__round" aria-hidden="true">
@@ -277,7 +284,7 @@ function CardQuestion({ question, answer, graded, onSubmit }) {
           className={`test-flashcard__action is-yes${resolved && know === true ? ' is-active' : ''}`}
           aria-label="Знаю"
           title="Знаю"
-          disabled={resolved}
+          disabled={locked}
           onClick={() => onSubmit({ know: true })}
         >
           <span className="test-flashcard__round" aria-hidden="true">
@@ -298,13 +305,12 @@ function CardQuestion({ question, answer, graded, onSubmit }) {
 
 /**
  * Подсказка рядом с кнопкой «Готово»: до отправки выбор можно менять.
+ * В ветвлении этой кнопки нет — ответ фиксирует «Дальше» в подвале.
  */
-function submitHint(question, graded, ready) {
+function submitHint(question, ready) {
   if (question.type === 'match') {
     return ready ? 'Пары можно менять до нажатия «Готово».' : 'Соедините все пары и нажмите «Готово».';
   }
-
-  if (!graded) return ready ? 'Кнопка «Готово» зафиксирует выбор.' : 'Отметьте вариант, чтобы продолжить.';
 
   return ready
     ? 'Выбор можно менять до нажатия «Готово».'
@@ -315,11 +321,14 @@ function submitHint(question, graded, ready) {
  * Текущий вопрос читателя. Выбор варианта — черновик: подсветки «верно /
  * неверно» нет, ответ можно менять до нажатия «Готово» в правом нижнем углу
  * карточки вопроса. Только «Готово» фиксирует ответ, проверяет его (в тесте с
- * оценкой) и блокирует варианты. В режиме ветвления выбор ведёт по пути.
+ * оценкой) и блокирует варианты. В режиме ветвления «Готово» нет: ответ
+ * фиксирует «Дальше», а изменить его на пройденном вопросе можно — ветка
+ * пересоберётся. Тогда и общее число вопросов неизвестно (`total` = null).
  *
  * В правом верхнем углу карточки — флажок «Вернуться позже»: он не связан с
  * ответом, поэтому доступен и до, и после «Готово», а в навигации помеченный
- * вопрос получает красный треугольник.
+ * вопрос получает красный треугольник. В ветвлении навигации нет, поэтому
+ * флажок не показывается.
  */
 export default function ReaderQuestion({
   question,
@@ -337,16 +346,15 @@ export default function ReaderQuestion({
   onLinkClick,
 }) {
   const resolved = isResolved(answer);
-  const selected = answer?.selected ?? draft?.selected ?? [];
-  const matches = answer?.matches ?? draft?.matches ?? {};
-  const value = question.type === 'match' ? { matches } : { selected };
+  const value = answerValue(question, answer, draft);
   const ready = canSubmit(question, value);
 
   return (
     <article className="test-question" data-question-id={question.id}>
       <header className="test-question__head">
+        {/* В ветвлении общее число вопросов неизвестно — показываем только номер. */}
         <span className="test-question__step">
-          Вопрос {index + 1} из {total}
+          {total ? `Вопрос ${index + 1} из ${total}` : `Вопрос ${index + 1}`}
         </span>
 
         <span className="badge badge--gray">
@@ -363,17 +371,19 @@ export default function ReaderQuestion({
           </span>
         )}
 
-        <button
-          type="button"
-          className={`test-flag${flagged ? ' is-flagged' : ''}`}
-          data-flag-toggle
-          aria-pressed={flagged}
-          aria-label={flagged ? 'Снять отметку «Вернуться позже»' : 'Отметить для возврата'}
-          title={flagged ? 'Снять отметку' : 'Отметить для возврата'}
-          onClick={() => onToggleFlag?.()}
-        >
-          <Icon name="flag" size={16} />
-        </button>
+        {onToggleFlag && (
+          <button
+            type="button"
+            className={`test-flag${flagged ? ' is-flagged' : ''}`}
+            data-flag-toggle
+            aria-pressed={flagged}
+            aria-label={flagged ? 'Снять отметку «Вернуться позже»' : 'Отметить для возврата'}
+            title={flagged ? 'Снять отметку' : 'Отметить для возврата'}
+            onClick={() => onToggleFlag()}
+          >
+            <Icon name="flag" size={16} />
+          </button>
+        )}
       </header>
 
       {question.type !== 'card' && <h2 className="test-question__title">{questionTitle(question)}</h2>}
@@ -406,9 +416,10 @@ export default function ReaderQuestion({
         <CardQuestion question={question} answer={answer} graded={graded} onSubmit={onSubmit} />
       )}
 
-      {question.type !== 'card' && !resolved && (
+      {/* В ветвлении «Готово» нет: ответ фиксирует «Дальше» в подвале. */}
+      {question.type !== 'card' && graded && !resolved && (
         <div className="test-question__submit">
-          <span className="test-question__submit-hint">{submitHint(question, graded, ready)}</span>
+          <span className="test-question__submit-hint">{submitHint(question, ready)}</span>
           <Button onClick={() => onSubmit(value)} disabled={!ready}>
             Готово
           </Button>

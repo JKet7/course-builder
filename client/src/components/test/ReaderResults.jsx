@@ -22,13 +22,23 @@ function scoreTone(percent) {
  * Итоги попытки: процент (в тесте с оценкой) или число отвеченных вопросов,
  * время, статистика по группам, раскрывающаяся детализация по каждому вопросу,
  * итоговый комментарий автора и переходы. В режиме ветвления оценки нет:
- * правильные ответы не показываются, проценты не считаются.
+ * правильные ответы не показываются, проценты и группы не считаются, зато
+ * первым блоком идёт итог пройденного пути — заголовок раздела и его описание.
  */
 export default function ReaderResults({ block, results, nextBlock, onRestart }) {
   const graded = results.graded !== false;
   const tone = graded ? scoreTone(results.percent) : 'neutral';
   const unanswered = Math.max(0, results.total - results.answered);
   const courseId = block.courseId ?? block.course?.id ?? null;
+  // Ветвление: итог — раздел, в котором закончился путь, и его описание.
+  const resultTitle = graded ? null : results.resultTitle;
+
+  const resultBlock = results.result ? (
+    <section className="test-results__comment">
+      <span className="test-results__label">{graded ? 'Комментарий' : 'Итог'}</span>
+      <TiptapContent doc={results.result} />
+    </section>
+  ) : null;
 
   return (
     <div className="test-results">
@@ -42,8 +52,8 @@ export default function ReaderResults({ block, results, nextBlock, onRestart }) 
         </div>
 
         <div className="test-results__hero-body">
-          <span className="test-results__eyebrow">Тест завершён</span>
-          <h2 className="test-results__title">{block.title}</h2>
+          <span className="test-results__eyebrow">{graded ? 'Тест завершён' : 'Ваш результат'}</span>
+          <h2 className="test-results__title">{resultTitle ?? block.title}</h2>
           <p className="test-results__hint">
             {graded
               ? `Верно ${results.correct} из ${results.answered} отвеченных · время ${formatDuration(results.elapsed)}`
@@ -77,7 +87,10 @@ export default function ReaderResults({ block, results, nextBlock, onRestart }) 
         </div>
       </section>
 
-      {results.groups.length > 0 && (
+      {/* В ветвлении итог пути показывается сразу под шапкой — это главное на экране. */}
+      {!graded && resultBlock}
+
+      {graded && results.groups.length > 0 && (
         <section className="test-results__section" aria-label="Статистика по группам">
           <h3 className="test-results__section-title">По группам</h3>
 
@@ -86,25 +99,21 @@ export default function ReaderResults({ block, results, nextBlock, onRestart }) 
               <article className="test-results__group" key={group.id}>
                 <header className="test-results__group-head">
                   <span className="test-results__group-name">{group.name}</span>
-                  {graded && <strong className="test-results__group-percent">{group.percent}%</strong>}
+                  <strong className="test-results__group-percent">{group.percent}%</strong>
                 </header>
 
-                {graded && (
-                  <div
-                    className="test-results__bar"
-                    role="progressbar"
-                    aria-valuenow={group.percent}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                  >
-                    <span style={{ width: `${group.percent}%` }} />
-                  </div>
-                )}
+                <div
+                  className="test-results__bar"
+                  role="progressbar"
+                  aria-valuenow={group.percent}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
+                  <span style={{ width: `${group.percent}%` }} />
+                </div>
 
                 <span className="test-results__group-hint">
-                  {graded
-                    ? `${group.correct} из ${group.answered} отвеченных · всего ${group.total}`
-                    : `Отвечено ${group.answered} из ${group.total}`}
+                  {group.correct} из {group.answered} отвеченных · всего {group.total}
                 </span>
               </article>
             ))}
@@ -153,12 +162,7 @@ export default function ReaderResults({ block, results, nextBlock, onRestart }) 
         </div>
       </section>
 
-      {results.result && (
-        <section className="test-results__comment">
-          <span className="test-results__label">Комментарий</span>
-          <TiptapContent doc={results.result} />
-        </section>
-      )}
+      {graded && resultBlock}
 
       <div className="test-results__actions">
         <Button variant="secondary" onClick={onRestart}>
