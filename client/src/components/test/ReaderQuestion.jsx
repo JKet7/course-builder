@@ -237,6 +237,29 @@ function MatchQuestion({ question, answer, draft, pairOrder, graded, onDraft, on
 }
 
 /**
+ * Сторона карточки: изображение сверху, подпись под ним. Картинка лежит в
+ * отдельном медиа-слое, поэтому вписывается в свободное место и не выходит за
+ * рамку; если изображения нет, подпись стоит по центру блока.
+ */
+function CardFace({ image, text, alt, back = false }) {
+  return (
+    <div className={`test-flashcard__face${back ? ' test-flashcard__face--back' : ''}`}>
+      {image && (
+        <div className="test-flashcard__media">
+          <img className="test-flashcard__image" src={image} alt={alt} />
+        </div>
+      )}
+
+      {text ? (
+        <p className="test-flashcard__text">{text}</p>
+      ) : (
+        !image && <p className="test-flashcard__text">—</p>
+      )}
+    </div>
+  );
+}
+
+/**
  * Карточка: передняя сторона, две круглые кнопки и переворот после ответа.
  * «Знаю / Не знаю» — это и есть ответ, поэтому он сразу уходит в проверку.
  */
@@ -250,17 +273,8 @@ function CardQuestion({ question, answer, graded, onSubmit }) {
     <>
       <div className={`test-flashcard${resolved ? ' is-flipped' : ''}`}>
         <div className="test-flashcard__inner">
-          <div className="test-flashcard__face">
-            {data.front && <p className="test-flashcard__text">{data.front}</p>}
-            {data.frontImage && <img className="test-flashcard__image" src={data.frontImage} alt="Передняя сторона" />}
-            {!data.front && !data.frontImage && <p className="test-flashcard__text">—</p>}
-          </div>
-
-          <div className="test-flashcard__face test-flashcard__face--back">
-            {data.back && <p className="test-flashcard__text">{data.back}</p>}
-            {data.backImage && <img className="test-flashcard__image" src={data.backImage} alt="Задняя сторона" />}
-            {!data.back && !data.backImage && <p className="test-flashcard__text">—</p>}
-          </div>
+          <CardFace image={data.frontImage} text={data.front} alt="Передняя сторона" />
+          <CardFace image={data.backImage} text={data.back} alt="Задняя сторона" back />
         </div>
       </div>
 
@@ -276,7 +290,6 @@ function CardQuestion({ question, answer, graded, onSubmit }) {
           <span className="test-flashcard__round" aria-hidden="true">
             <Icon name="x" size={22} />
           </span>
-          <span className="test-flashcard__action-label">Не знаю</span>
         </button>
 
         <button
@@ -290,7 +303,6 @@ function CardQuestion({ question, answer, graded, onSubmit }) {
           <span className="test-flashcard__round" aria-hidden="true">
             <Icon name="check" size={22} />
           </span>
-          <span className="test-flashcard__action-label">Знаю</span>
         </button>
       </div>
 
@@ -350,7 +362,10 @@ export default function ReaderQuestion({
   const ready = canSubmit(question, value);
 
   return (
-    <article className="test-question" data-question-id={question.id}>
+    <article
+      className={`test-question${question.type === 'card' ? ' test-question--card' : ''}`}
+      data-question-id={question.id}
+    >
       <header className="test-question__head">
         {/* В ветвлении общее число вопросов неизвестно — показываем только номер. */}
         <span className="test-question__step">

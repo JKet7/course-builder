@@ -2209,7 +2209,7 @@ try {
   const testView = render(TestBlock, '/block/block-test', { block: testBlockData });
   check(
     'test (view): один вопрос, шапка с таймером и прогрессом',
-    (testView.match(/class="test-question"/g) ?? []).length === 1 &&
+    (testView.match(/class="test-question[ "]/g) ?? []).length === 1 &&
       testView.includes('test-run__head') &&
       testView.includes('test-run__timer') &&
       testView.includes('00:00') &&
@@ -2428,6 +2428,29 @@ try {
       cardHtml.includes('Не знаю') &&
       cardHtml.includes('Знаю') &&
       !cardHtml.includes('test-question__submit'),
+  );
+
+  // Карточка с изображением: картинка в медиа-слое, подпись под ней, без подписей
+  // у кнопок. Панель вопроса прозрачная — рамку несёт сам блок карточки.
+  const cardImageHtml = render(ReaderQuestion, '/block/block-test', {
+    question: {
+      ...sampleQuestions[3],
+      data: { front: 'nature', frontImage: '/uploads/nature.jpg', back: 'природа' },
+    },
+    index: 0,
+    total: 1,
+    answer: null,
+    onSubmit: testNoop,
+  });
+  check(
+    'test (reader): карточка — изображение в рамке, подпись под ним',
+    cardImageHtml.includes('test-question test-question--card') &&
+      cardImageHtml.includes('src="/uploads/nature.jpg"') &&
+      cardImageHtml.includes('test-flashcard__media') &&
+      cardImageHtml.indexOf('test-flashcard__media') < cardImageHtml.indexOf('test-flashcard__text') &&
+      !cardImageHtml.includes('test-flashcard__action-label') &&
+      cardImageHtml.includes('aria-label="Не знаю"') &&
+      cardImageHtml.includes('aria-label="Знаю"'),
   );
 
   // Флажок «Вернуться позже»: отметка в попытке, ответ и вердикт не меняются.
@@ -2882,6 +2905,21 @@ try {
       globalsCss.includes('.test-run__step {') &&
       globalsCss.includes('.test-run__step-hint {') &&
       globalsCss.includes('.test-run__notice {'),
+  );
+
+  // Карточка «Знаю / Не знаю»: компактный квадрат по центру, картинка внутри
+  // рамки через медиа-слой, подписи у кнопок-контуров убраны.
+  check(
+    'test (css): карточка — квадрат по центру, изображение внутри рамки',
+    /\.test-flashcard \{[^}]*max-width: 460px;/.test(globalsCss) &&
+      /\.test-flashcard \{[^}]*margin: 8px auto 0;/.test(globalsCss) &&
+      /\.test-flashcard__inner \{[^}]*aspect-ratio: 1 \/ 1;/.test(globalsCss) &&
+      globalsCss.includes('.test-flashcard__media {') &&
+      /\.test-flashcard__face \{[^}]*overflow: hidden;/.test(globalsCss) &&
+      /\.test-flashcard__image \{[^}]*max-height: 100%;/.test(globalsCss) &&
+      globalsCss.includes('.test-question--card {') &&
+      /\.test-flashcard__round \{[^}]*border: 2px solid currentColor;/.test(globalsCss) &&
+      !globalsCss.includes('.test-flashcard__action-label'),
   );
 
   // Логика режима редактора: раскладка разделов, перетаскивание и переходы.
