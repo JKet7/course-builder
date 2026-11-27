@@ -9,11 +9,28 @@ const REQUEST_TIMEOUT = 20000;
 /** Проверка «жив ли API» быстрая: ждать её 20 секунд бессмысленно. */
 const HEALTH_TIMEOUT = 5000;
 
-/** Паузы перед повтором GET при временной ошибке — всего два повтора. */
-const RETRY_DELAYS = [400, 1200];
+/**
+ * Паузы перед повтором запроса при временной ошибке — три повтора.
+ *
+ * `node --watch` перезапускает Express на каждое сохранение файла на сервере:
+ * 1–2 секунды API не отвечает, прокси отдаёт 503. Суммарное ожидание здесь —
+ * около 6 секунд, поэтому такой перезапуск проходит незаметно для пользователя.
+ */
+const RETRY_DELAYS = [500, 1500, 4000];
 
-/** Коды ответов, при которых идемпотентный GET имеет смысл повторить. */
+/** Коды ответов, при которых идемпотентный запрос имеет смысл повторить. */
 const RETRY_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+/**
+ * Методы, которые можно повторять без риска для данных.
+ *
+ * GET и HEAD ничего не меняют. PUT и DELETE идемпотентны по стандарту HTTP:
+ * повтор с тем же телом приводит к тому же состоянию (переименование, порядок
+ * карточек, настройки, удаление). POST и PATCH не повторяем — они создают новую
+ * запись или меняют только часть полей, и повтор мог бы задвоить результат.
+ */
+const RETRY_METHODS = new Set(['get', 'head', 'put', 'delete']);
+
 
 /** Технические тексты axios: пользователю их показывать нельзя. */
 const TECHNICAL_MESSAGE = /Request failed with status code|Network Error|timeout of \d+ ?ms exceeded|ERR_NETWORK/i;
@@ -86,7 +103,8 @@ export function checkApi() {
 }
 
 // 401 → сессия недействительна: чистим токен и уходим на логин.
-// Временные ошибки GET повторяем сами: прокси мог не застать API (перезапуск).
+// Временные ошибки повторяем сами: прокси мог не застать API (перезапуск),
+// а база — на секунду занять файл. Какие методы повторять — см. RETRY_METHODS.
 api.interceptors.response.use(
   async (response) => response,
   async (error) => {
@@ -106,7 +124,7 @@ api.interceptors.response.use(
     const attempt = config?.__retry ?? 0;
     const retryable =
       config &&
-      config.method === 'get' &&
+      RETRY_METHODS.has(String(config.method ?? '').toLowerCase()) &&
       config.retry !== false &&
       attempt < RETRY_DELAYS.length &&
       isTransientError(error);
